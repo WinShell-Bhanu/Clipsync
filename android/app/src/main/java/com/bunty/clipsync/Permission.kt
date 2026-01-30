@@ -62,7 +62,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
 
     var accessibilityGranted by remember { mutableStateOf(false) }
     var overlayGranted by remember { mutableStateOf(false) }
-    var notificationAccessGranted by remember { mutableStateOf(false) }
+    var smsPermissionGranted by remember { mutableStateOf(false) }
 
     // --- Animation Sequence (Staggered Entrance) ---
     var showHeader by remember { mutableStateOf(false) }
@@ -109,16 +109,29 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         }
     )
 
+    // Launcher for SMS Permissions
+    val smsLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions(),
+        onResult = { permissions ->
+            smsPermissionGranted = permissions[Manifest.permission.RECEIVE_SMS] == true &&
+                                   permissions[Manifest.permission.READ_SMS] == true
+        }
+    )
+
     // Check on first load & Periodic check
     LaunchedEffect(Unit) {
         accessibilityGranted = isAccessibilityServiceEnabled(context)
+        smsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
+                               ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
         while (true) {
             delay(1000)
             val wasEnabled = accessibilityGranted
             accessibilityGranted = isAccessibilityServiceEnabled(context)
             overlayGranted = Settings.canDrawOverlays(context)
-            notificationAccessGranted = isNotificationServiceEnabled(context)
-            
+            smsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
+                                   ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
             if (Build.VERSION.SDK_INT >= 33) {
                 notificationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             }
@@ -249,7 +262,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                      )
                  }
 
-                 // --- Item 4: Notification Access ---
+                 // --- Item 4: SMS Access ---
                  AnimatedVisibility(
                     visible = showItem4,
                     enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
@@ -257,14 +270,17 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                  ) {
                      PermissionItem(
                         iconRes = R.drawable.notiaccess,
-                        title = "Notifications Access",
+                        title = "SMS Access",
                         description = "Auto-detect OTP codes for instant sync.",
-                        isChecked = notificationAccessGranted,
+                        isChecked = smsPermissionGranted,
                         onToggle = {
-                            if (!notificationAccessGranted) {
-                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
-                                context.startActivity(intent)
-                                Toast.makeText(context, "Enable ClipSync Notification Access", Toast.LENGTH_LONG).show()
+                            if (!smsPermissionGranted) {
+                                smsLauncher.launch(
+                                    arrayOf(
+                                        Manifest.permission.RECEIVE_SMS,
+                                        Manifest.permission.READ_SMS
+                                    )
+                                )
                             }
                         },
                         fontFamily = robotoFontFamily,
@@ -443,10 +459,6 @@ fun isAccessibilityServiceEnabled(context: android.content.Context): Boolean {
     }
 }
 
-fun isNotificationServiceEnabled(context: Context): Boolean {
-    val flat = Settings.Secure.getString(context.contentResolver, "enabled_notification_listeners")
-    return flat?.contains(context.packageName) == true
-}
 
 @Preview(showBackground = true, widthDp = 412, heightDp = 915)
 @Composable

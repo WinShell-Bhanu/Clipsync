@@ -1,9 +1,9 @@
-<div align="left">
-  <img src="mac/ClipSync/Assets.xcassets/AppIcon.appiconset/Readme-logo.png" alt="Clipsync logo" align="left" style="margin-right: 20px;" />
-  <a href="https://www.buymeacoffee.com/clipsync">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200" />
+<div>
+  <img src="mac/ClipSync/Assets.xcassets/AppIcon.appiconset/Readme-logo.png" alt="Clipsync logo" align="left" />
+  <a href="https://www.buymeacoffee.com/clipsync" align="right">
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200" align="right" />
   </a>
-  <br clear="left"/>
+  <br clear="both"/>
 </div>
 
 # ClipSync: Seamless Universal Clipboard

@@ -1,7 +1,7 @@
 <div>
   <img src="mac/ClipSync/Assets.xcassets/AppIcon.appiconset/Readme-logo.png" alt="Clipsync logo" align="left" />
   <a href="https://www.buymeacoffee.com/clipsync" align="right">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200" align="right" />
+    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200" align="right" style="margin-top: 90px; margin-right: 80px;" />
   </a>
   <br clear="both"/>
 </div>

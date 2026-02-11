@@ -92,7 +92,6 @@ fun CameraQRScanner(
                                                 hasScanned = true
                                                 scannedQRCode = qrCode
                                                 showLoading = true
-                                                Log.d("CameraQRScanner", "QR Scanned: $qrCode - Showing loading...")
                                             }
                                         } else {
                                             imageProxy.close()
@@ -177,7 +176,6 @@ private fun processImageProxy(
                     if (barcode.valueType == Barcode.TYPE_TEXT ||
                         barcode.valueType == Barcode.TYPE_URL) {
                         barcode.rawValue?.let { qrCode ->
-                            Log.d("CameraQRScanner", "QR Code detected: $qrCode")
                             onQRCodeDetected(qrCode)
                         }
                     }

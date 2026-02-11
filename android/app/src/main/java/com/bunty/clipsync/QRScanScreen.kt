@@ -15,7 +15,6 @@ import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.Font
@@ -349,8 +348,3 @@ fun QRScanScreen(
     }
 
 
-@Preview(showBackground = true, widthDp = 360, heightDp = 800)
-@Composable
-fun QRScanScreenPreview() {
-    QRScanScreen()
-}

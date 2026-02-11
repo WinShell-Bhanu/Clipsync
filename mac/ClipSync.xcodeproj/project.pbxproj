@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */; };
+		BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */ = {isa = PBXBuildFile; productRef = BFE62CD52F34AF70009DE3D3 /* Shimmer */; };
 		BFF698172EFD43C60037416F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF94DD432EF29B7F0034A1B9 /* Security.framework */; };
 		BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6981E2EFD6C6B0037416F /* FirebaseCore */; };
 		BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = BFF698202EFD6C6B0037416F /* FirebaseDatabase */; };
@@ -34,6 +35,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */,
 				BFF698172EFD43C60037416F /* Security.framework in Frameworks */,
 				BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */,
 				BFF6982C2EFD70300037416F /* Lottie in Frameworks */,
@@ -95,6 +97,7 @@
 				BFF698202EFD6C6B0037416F /* FirebaseDatabase */,
 				BFF698222EFD6C6B0037416F /* FirebaseFirestore */,
 				BFF6982B2EFD70300037416F /* Lottie */,
+				BFE62CD52F34AF70009DE3D3 /* Shimmer */,
 			);
 			productName = ClipSync;
 			productReference = BF1CFB822E887C7500B7A454 /* ClipSync.app */;
@@ -127,6 +130,7 @@
 			packageReferences = (
 				BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
 				BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */,
+				BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = BF1CFB832E887C7500B7A454 /* Products */;
@@ -407,6 +411,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/markiv/SwiftUI-Shimmer.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.5.1;
+			};
+		};
 		BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
@@ -426,6 +438,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BFE62CD52F34AF70009DE3D3 /* Shimmer */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */;
+			productName = Shimmer;
+		};
 		BFF6981E2EFD6C6B0037416F /* FirebaseCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

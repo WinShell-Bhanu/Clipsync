@@ -275,7 +275,6 @@ struct QRGenScreen: View {
         }
         .onChange(of: pairingManager.isPaired) { oldValue, newValue in
             if newValue {
-                print("✅ Pairing successful! Navigating to ConnectedScreen...")
                 navigateToConnected = true
             }
         }
@@ -287,39 +286,26 @@ struct QRGenScreen: View {
     
     // MARK: - Region Detection & Setup
     private func detectAndSetupRegion() {
-        // 1. Check for previously saved selection to prevent Loop
         if let savedCountry = UserDefaults.standard.string(forKey: "selected_country_name") {
-            print("💾 Found saved country preference: \(savedCountry). Skipping auto-detect.")
             self.selectedCountry = savedCountry
-            self.detectedCountry = savedCountry // Treat saved as detected
+            self.detectedCountry = savedCountry
             self.isDetecting = false
-            
-            // Ensure server_region matches the country (healing self-state)
             self.updateServerRegion(for: savedCountry)
             return
         }
         
-        // 2. No saved preference? Run Auto-Detect (First Launch)
         isDetecting = true
         
-        // Try to detect user's country via IP
         LocationHelper.shared.detectRegion { countryCode in
             DispatchQueue.main.async {
                 self.isDetecting = false
                 
-                // Map country code to full name
                 if let countryCode = countryCode {
                     let countryName = self.findCountryName(from: countryCode)
                     self.detectedCountry = countryName
                     self.selectedCountry = countryName
-                    
-                    print("🌍 Detected: \(countryName) (\(countryCode))")
-                    
-                    // Set server region (saves to defaults)
                     self.updateServerRegion(for: countryName)
                 } else {
-                    // Fallback to India if detection fails
-                    print("⚠️ Location detection failed, defaulting to India")
                     self.selectedCountry = "India"
                     self.detectedCountry = "India"
                     self.updateServerRegion(for: "India")
@@ -392,28 +378,16 @@ struct QRGenScreen: View {
     }
     
     private func updateServerRegion(for country: String) {
-        // Get optimal server for this country
         let newRegion = RegionConfig.getOptimalServer(for: country)
-        
-        // Check current region (what the app is actually running on)
         let currentRegion = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
         
-        print("🌍 Country: \(country) → Server: \(newRegion) (Current: \(currentRegion))")
-        
-        // ALWAYS Save the user's selected country name so we remember it on restart
         UserDefaults.standard.set(country, forKey: "selected_country_name")
         
         if newRegion != currentRegion {
-            print("⚠️ Region changed! Restarting app to apply...")
-            
-            // Save new region
             UserDefaults.standard.set(newRegion, forKey: "server_region")
-            UserDefaults.standard.synchronize() // Force save
-            
-            // Restart App
+            UserDefaults.standard.synchronize()
             restartApp()
         } else {
-            // Just update UI if region matches (e.g. India -> Sri Lanka is still IN)
             qrGenerator.generateQRCode()
         }
     }

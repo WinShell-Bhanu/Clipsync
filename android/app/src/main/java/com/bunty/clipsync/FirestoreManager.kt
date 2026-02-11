@@ -8,7 +8,7 @@ import org.json.JSONObject
 
 object FirestoreManager {
     // Dynamic DB Access based on selected region
-    private fun getDb(context: Context): FirebaseFirestore {
+    internal fun getDb(context: Context): FirebaseFirestore {
         val targetRegion = DeviceManager.getTargetRegion(context)
         return if (targetRegion == RegionConfig.REGION_US) {
             // Use the Named App for US
@@ -137,10 +137,8 @@ object FirestoreManager {
         val macDeviceName = qrData["macDeviceName"] as? String ?: "Mac"
         val secret = qrData["secret"] as? String
         
-        // SAVE SECRET
         if (!secret.isNullOrEmpty()) {
             DeviceManager.saveEncryptionKey(context, secret)
-            Log.d("FirestoreManager", "Secure Key Swapped & Saved ")
         }
 
         val pairingData = hashMapOf<String, Any>(
@@ -161,7 +159,6 @@ object FirestoreManager {
                 .add(pairingData)
                 .addOnSuccessListener { documentReference ->
                     val pairingId = documentReference.id
-                    Log.d("FirestoreManager", "Pairing created: $pairingId")
                     documentReference.update("pairingId", pairingId)
 
                     DeviceManager.savePairing(
@@ -179,18 +176,13 @@ object FirestoreManager {
                 }
         }
 
-        // Check for existing PREVIOUS pairing and delete it first
         val oldPairingId = DeviceManager.getPairingId(context)
         if (oldPairingId != null) {
-            Log.d("FirestoreManager", "Found existing pairing ($oldPairingId). Deleting first...")
             getDb(context).collection("pairings").document(oldPairingId).delete()
                 .addOnSuccessListener {
-                    Log.d("FirestoreManager", "Old pairing deleted. Creating new one...")
                     createNewPairing()
                 }
                 .addOnFailureListener { e ->
-                    Log.w("FirestoreManager", "Failed to delete old pairing. Creating new one anyway...", e)
-                    // Proceed even if delete fails (e.g. already deleted or permission issue)
                     createNewPairing()
                 }
         } else {
@@ -268,7 +260,6 @@ object FirestoreManager {
         getDb(context).collection("clipboardItems")
             .add(clipboardData)
             .addOnSuccessListener {
-                Log.d("FirestoreManager", "Clipboard sent successfully (Encrypted)")
                 onSuccess()
             }
             .addOnFailureListener { exception ->
@@ -277,7 +268,6 @@ object FirestoreManager {
             }
     }
 
-    // Clear pairing from Firestore
     fun clearPairing(
         context: Context,
         onSuccess: () -> Unit = {},
@@ -289,7 +279,6 @@ object FirestoreManager {
             .document(pairingId)
             .delete()
             .addOnSuccessListener {
-                Log.d("FirestoreManager", "Pairing cleared from Firestore")
                 DeviceManager.clearPairing(context)
                 onSuccess()
             }
@@ -321,7 +310,6 @@ object FirestoreManager {
                 }
                 batch.commit()
                     .addOnSuccessListener {
-                        Log.d("FirestoreManager", "Clipboard cleared successfully")
                         onSuccess()
                     }
                     .addOnFailureListener { e ->

@@ -109,22 +109,17 @@ fun ClipSyncNavigation(startDestination: String) {
                         val parsedData = FirestoreManager.parseQRData(qrData)
 
                         if (parsedData != null) {
-                            // REGION SAFETY CHECK
                             val qrRegion = parsedData["serverRegion"] as? String ?: "IN"
                             val initializedRegion = DeviceManager.initializedRegion
 
                             if (qrRegion != initializedRegion) {
-                                Log.i("MainActivity", "Region mismatch (QR: $qrRegion vs Init: $initializedRegion). Switching preference.")
                                 DeviceManager.setTargetRegion(context, qrRegion)
-                                // No restart needed! FirestoreManager will pick up the new region dynamically.
                             }
 
-                            Log.d("MainActivity", "Creating pairing with parsed data")
                             FirestoreManager.createPairing(
                                 context = context,
                                 qrData = parsedData,
                                 onSuccess = { pairingId ->
-                                    Log.d("MainActivity", "Pairing success")
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                                         navController.navigate("connection") {
                                             popUpTo("landing") { inclusive = true }
@@ -132,7 +127,6 @@ fun ClipSyncNavigation(startDestination: String) {
                                     }
                                 },
                                 onFailure = { e ->
-                                    Log.e("MainActivity", "Pairing failed", e)
                                     android.os.Handler(android.os.Looper.getMainLooper()).post {
                                         Toast.makeText(context, "Pairing failed: ${e.message}", Toast.LENGTH_LONG).show()
                                         navController.popBackStack()
@@ -140,7 +134,6 @@ fun ClipSyncNavigation(startDestination: String) {
                                 }
                             )
                         } else {
-                            Log.e("MainActivity", "Failed to parse QR data")
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 Toast.makeText(context, "Invalid QR Code", Toast.LENGTH_SHORT).show()
                                 navController.navigate("qrscan") {
@@ -183,6 +176,11 @@ fun ClipSyncNavigation(startDestination: String) {
                     onRepairClick = {
                         DeviceManager.clearPairing(navController.context)
                         navController.navigate("qrscan?startCamera=true") {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    },
+                    onResetPairing = {
+                        navController.navigate("landing") {
                             popUpTo(0) { inclusive = true }
                         }
                     }

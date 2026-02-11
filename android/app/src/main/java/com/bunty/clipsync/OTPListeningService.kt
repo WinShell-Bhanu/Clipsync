@@ -12,7 +12,7 @@ import android.util.Log
 import android.widget.Toast
 
 /**
- * OTP Listening Service - Automatically detects OTP codes from incoming SMS
+ * OTP Listening Service - Automatically detects OTP codes from incoming SMS messages
  *
  * Detection Logic:
  * 1. Listens for incoming SMS messages
@@ -20,6 +20,8 @@ import android.widget.Toast
  * 3. Extracts 4-8 digit numeric patterns
  * 4. Validates patterns (no special chars, no letters between digits)
  * 5. Auto-copies detected OTP to clipboard using ClipboardGhostActivity
+ *
+ * Note: For email OTP detection, see EmailOTPListenerService
  */
 class OTPListeningService : BroadcastReceiver() {
 
@@ -29,6 +31,9 @@ class OTPListeningService : BroadcastReceiver() {
         // Prevent duplicate processing within short time window
         private var lastProcessedTime = 0L
         private const val MIN_PROCESSING_INTERVAL = 1000L // 1 second
+
+        // Handler for UI operations (shared across all broadcasts)
+        private val mainHandler = Handler(Looper.getMainLooper())
 
         // Trigger keywords to identify OTP messages
         private val OTP_KEYWORDS = listOf(
@@ -50,55 +55,34 @@ class OTPListeningService : BroadcastReceiver() {
             return
         }
 
-        // Prevent duplicate processing within short time window
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastProcessedTime < MIN_PROCESSING_INTERVAL) {
-            Log.d(TAG, "Skipping - too soon after last OTP processing")
             return
         }
 
-        Log.d(TAG, "SMS Received - Processing...")
-
         try {
-            // Extract SMS messages from intent
             val messages = extractSmsMessages(intent)
 
             for (message in messages) {
                 val messageBody = message.messageBody ?: continue
-                val sender = message.originatingAddress ?: "Unknown"
 
-                Log.d(TAG, "SMS from: $sender")
-                Log.d(TAG, "Message: $messageBody")
-
-                // Check if message contains OTP keywords
                 if (containsOTPKeyword(messageBody)) {
-                    Log.d(TAG, "OTP keyword detected!")
-
-                    // Extract OTP code
                     val otpCode = extractOTP(messageBody)
 
                     if (otpCode != null) {
-                        Log.d(TAG, "OTP Detected: $otpCode")
-
-                        // Update last processed time
                         lastProcessedTime = currentTime
 
-                        // Auto-copy to clipboard using ClipboardGhostActivity
                         ClipboardGhostActivity.copyToClipboard(context, otpCode)
+                        OTPNotificationService.notifyOTPDetected(context, otpCode)
 
-                        // Show confirmation toast on main thread
-                        Handler(Looper.getMainLooper()).post {
+                        mainHandler.post {
                             Toast.makeText(
                                 context,
                                 "OTP Copied: $otpCode",
                                 Toast.LENGTH_SHORT
                             ).show()
                         }
-
-                        // Only process first valid OTP
                         break
-                    } else {
-                        Log.d(TAG, "No valid OTP pattern found")
                     }
                 }
             }
@@ -192,33 +176,25 @@ class OTPListeningService : BroadcastReceiver() {
      * - Ensure it's not part of a larger number (like phone number)
      */
     private fun isValidOTP(code: String, fullMessage: String, range: IntRange): Boolean {
-        // Check length
         if (code.length !in 4..8) {
             return false
         }
 
-        // Get character before and after the match
         val before = if (range.first > 0) fullMessage[range.first - 1] else ' '
         val after = if (range.last < fullMessage.length - 1) fullMessage[range.last + 1] else ' '
 
-        // Reject if surrounded by digits (might be phone number or long number)
         if (before.isDigit() || after.isDigit()) {
-            Log.d(TAG, "Rejected: $code (adjacent digits)")
             return false
         }
 
-        // Reject if has special characters immediately adjacent (except common punctuation)
         val allowedChars = setOf(' ', '\n', '\r', '\t', '.', ':', '-', ',', '(', ')', '[', ']')
         if (!allowedChars.contains(before) && !before.isLetter() && before != ' ') {
-            Log.d(TAG, "Rejected: $code (special char before: $before)")
             return false
         }
         if (!allowedChars.contains(after) && !after.isLetter() && after != ' ') {
-            Log.d(TAG, "Rejected: $code (special char after: $after)")
             return false
         }
 
-        // Valid OTP!
         return true
     }
 }

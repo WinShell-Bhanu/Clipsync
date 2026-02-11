@@ -6,7 +6,6 @@ import android.util.Log
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -97,12 +96,10 @@ fun LandingScreen(
             // European Countries (Better latency to US than IN)
             val euCountries = setOf("ES", "FR", "DE", "IT", "UK", "GB", "NL", "BE", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "AT", "CH", "PL", "CZ", "HU", "RO")
             
-            if (countryCode == "US" || euCountries.contains(countryCode)) {
+            if (countryCode in listOf("US", "CA", "MX")) {
                 DeviceManager.setTargetRegion(context, "US")
-                Log.d("LandingScreen", " Auto-detected US/EU Region ($countryCode) -> Using US Server")
             } else {
                 DeviceManager.setTargetRegion(context, "IN")
-                Log.d("LandingScreen", " Auto-detected Region ($countryCode) -> Using IN Server")
             }
         }
 
@@ -495,21 +492,7 @@ fun GetStartedButton(
             fontFamily = FontFamily(Font(R.font.roboto_medium)),
             fontWeight = FontWeight.Medium,
             letterSpacing = (-0.03f * 22).sp,
-            maxLines = 1
-        )
-    }
-}
-
-@Preview(showBackground = true, widthDp = 412, heightDp = 915)
-@Composable
-fun LandingScreenPreview() {
-    MaterialTheme {
-        MeshBackground(
-            modifier = Modifier.fillMaxSize(),
-            onPulse = false,
-            isPaused = false
-        ) {
-            LandingScreen()
+            }
         }
     }
 }

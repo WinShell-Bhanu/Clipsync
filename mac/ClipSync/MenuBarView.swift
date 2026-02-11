@@ -2,8 +2,6 @@
 // MenuBarView.swift
 // ClipSync
 //
-// Elegant Redesign
-//
 
 import SwiftUI
 import LocalAuthentication
@@ -29,7 +27,6 @@ struct MenuBarView: View {
     var body: some View {
         VStack(spacing: 0) {
             if showingRePairQR {
-                // --- QR Mode (Minimalist) ---
                 VStack(spacing: 20) {
                     Text("Scan to connect")
                         .font(.system(size: 14, weight: .medium))
@@ -69,10 +66,8 @@ struct MenuBarView: View {
                 .onDisappear { pairingManager.stopListening() }
                 
             } else {
-                // --- Main Menu Mode ---
                 VStack(spacing: 16) {
                     
-                    // Header: Status Area
                     HStack(spacing: 12) {
                         // Connection Dot
                         Circle()
@@ -192,7 +187,6 @@ struct MenuBarView: View {
         return "Synced " + formatter.localizedString(for: date, relativeTo: Date())
     }
     
-    // --- Biometric Auth (Re-Pair) ---
     func authenticateUser() {
         if isAuthenticating { return } // Guard against double clicks
         isAuthenticating = true
@@ -207,19 +201,30 @@ struct MenuBarView: View {
                     
                     if success {
                         withAnimation {
-                            self.pairingManager.unpair()
-                            self.showingRePairQR = true
+                            self.pairingManager.clearPairing(
+                                onSuccess: {
+                                    self.showingRePairQR = true
+                                },
+                                onFailure: { error in
+                                    self.showingRePairQR = true
+                                }
+                            )
                         }
                     }
                 }
             }
         } else {
-            // Fallback for dev / no-biometrics
             DispatchQueue.main.async {
                 self.isAuthenticating = false
                 withAnimation {
-                    self.pairingManager.unpair()
-                    self.showingRePairQR = true
+                    self.pairingManager.clearPairing(
+                        onSuccess: {
+                            self.showingRePairQR = true
+                        },
+                        onFailure: { _ in
+                            self.showingRePairQR = true
+                        }
+                    )
                 }
             }
         }

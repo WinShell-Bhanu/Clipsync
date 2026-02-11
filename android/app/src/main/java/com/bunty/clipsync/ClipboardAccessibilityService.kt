@@ -38,17 +38,27 @@ class ClipboardAccessibilityService : AccessibilityService() {
         @Volatile
         var lastSyncedContent: String = ""
 
+        @Volatile
+        var lastReadClipboardHash: String = "" // Track clipboard hash to prevent duplicate reads
+
         fun onClipboardRead(context: Context, text: String) {
             if (text.isBlank()) {
-                Log.d(TAG, "Ignoring blank clipboard")
+                return
+            }
+
+            val currentHash = text.hashCode().toString()
+
+            if (currentHash == lastReadClipboardHash) {
                 return
             }
 
             if (text == lastSyncedContent) {
+                lastReadClipboardHash = currentHash
                 return
             }
 
             lastSyncedContent = text
+            lastReadClipboardHash = currentHash
             uploadToFirestoreStatic(context.applicationContext, text)
         }
 
@@ -76,25 +86,12 @@ class ClipboardAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
-        Log.d(TAG, "Service Connected")
 
         try {
-            // Configuration is handled via accessibility_service_config.xml
-            // We do NOT override it here to avoid permission conflicts.
-
-            Log.d(TAG, "Accessibility configured")
             clipboardManager = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            Log.d(TAG, "Clipboard manager obtained")
-
-            // Register direct clipboard listener
-            // clipboardManager.addPrimaryClipChangedListener(clipListener)
-            // Log.d(TAG, "Direct clipboard listener registered")
-
-            Log.d(TAG, "Service initialized")
             startFirestoreListener()
-
         } catch (e: Exception) {
-            Log.e(TAG, "Crash in onServiceConnected", e)
+            Log.e(TAG, "Error in onServiceConnected", e)
         }
     }
 
@@ -210,7 +207,6 @@ class ClipboardAccessibilityService : AccessibilityService() {
                     }
 
                     if (triggerType != null) {
-                        Log.d(TAG, "Clipboard change detected")
                         lastEventTime = eventTime
                         handler.postDelayed({
                             handleClipboardChange(triggerType)
@@ -248,23 +244,17 @@ class ClipboardAccessibilityService : AccessibilityService() {
              // So we just skip the *local* string check, but continue to loop children.
         } else {
             val combined = "$text $contentDesc $viewId".trim()
-            if (combined.isNotEmpty()) {
-                 // Log.d(TAG, "Inspecting[D$depth]: '$combined'") // Removed verbose logging
-            }
-            
+
             if (combined.contains("copyright", ignoreCase = true)) return false
 
             val hasCopy = combined.contains("copy", ignoreCase = true)
             val hasCopied = combined.contains("copied", ignoreCase = true)
             val hasIdMatch = viewId.contains("copy", ignoreCase = true)
 
-            // Strict Logic for Deep Search:
             if (isClick && hasCopy) {
-                Log.d(TAG, "Deep search found Clickable Copy: '$combined'")
                 return true
             }
 
-            // Passive Mode (Content Changed):
             if (!isClick) {
                 if (hasCopied) {
                     return true
@@ -309,7 +299,6 @@ class ClipboardAccessibilityService : AccessibilityService() {
             return
         }
 
-        Log.d(TAG, "Launching Ghost Activity [Trigger: $trigger]")
         try {
             ClipboardGhostActivity.readFromClipboard(this)
         } catch (e: Exception) {
@@ -354,7 +343,6 @@ class ClipboardAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() {
-        Log.d(TAG, "Service interrupted")
     }
 
     override fun onDestroy() {
@@ -362,22 +350,15 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
         try {
             if (::clipboardManager.isInitialized) {
-                // clipboardManager.removePrimaryClipChangedListener(clipListener)
-                Log.d(TAG, "Clipboard listener unregistered")
             }
         } catch (e: Exception) {
             Log.e(TAG, "Error removing clipboard listener", e)
         }
 
-        // Stop Firestore listener
         firestoreListener?.remove()
         firestoreListener = null
-        
-        // Remove pending handler callbacks to prevent leaks
         handler.removeCallbacksAndMessages(null)
-        
         isRunning = false
-        Log.d(TAG, "Service destroyed")
     }
 }
 

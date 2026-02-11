@@ -1,11 +1,14 @@
 package com.bunty.clipsync
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.PowerManager
 import android.provider.Settings
 import android.widget.Toast
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -55,14 +58,14 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.ui.tooling.preview.Preview
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.bunty.clipsync.R
 
 @Composable
 fun Homescreen(
-    onRepairClick: () -> Unit = {}
+    onRepairClick: () -> Unit = {},
+    onResetPairing: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
@@ -96,11 +99,14 @@ fun Homescreen(
     // Permission States
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
     var isBatteryUnrestricted by remember { mutableStateOf(false) }
+    var isSmsPermissionGranted by remember { mutableStateOf(false) }
+    var isNotificationListenerEnabled by remember { mutableStateOf(false) }
 
     // Update Checker State (Version Management)
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
     var showUpdateDialog by remember { mutableStateOf(false) }
-    val currentVersion = "1.0.0" // TODO: Fetch from BuildConfig in production
+    var showResetDialog by remember { mutableStateOf(false) }
+    val currentVersion = "1.0.0"
 
     // Feature Toggles (Preferences)
     var syncToMac by remember { mutableStateOf(DeviceManager.isSyncToMacEnabled(context)) }
@@ -114,6 +120,12 @@ fun Homescreen(
         
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         isBatteryUnrestricted = pm.isIgnoringBatteryOptimizations(context.packageName)
+
+        isSmsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
+                                 ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
+
+        // Check if notification listener is enabled
+        isNotificationListenerEnabled = isNotificationServiceEnabled(context)
     }
 
     // Auto-refresh on Resume
@@ -170,6 +182,41 @@ fun Homescreen(
             dismissButton = {
                 TextButton(onClick = { showUpdateDialog = false }) {
                     Text("Later")
+                }
+            }
+        )
+    }
+
+    // Reset Pairing Confirmation Dialog
+    if (showResetDialog) {
+        AlertDialog(
+            onDismissRequest = { showResetDialog = false },
+            title = { Text(text = "Reset Pairing?") },
+            text = {
+                Text("This will unpair your device and delete all pairing data from the cloud. You'll need to pair again to use ClipSync.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showResetDialog = false
+                        FirestoreManager.clearPairing(
+                            context,
+                            onSuccess = {
+                                Toast.makeText(context, "Pairing reset successfully", Toast.LENGTH_SHORT).show()
+                                onResetPairing()
+                            },
+                            onFailure = { e ->
+                                Toast.makeText(context, "Failed to reset pairing: ${e.message}", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                    }
+                ) {
+                    Text("Reset", color = Color(0xFFFF3B30))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showResetDialog = false }) {
+                    Text("Cancel")
                 }
             }
         )
@@ -378,11 +425,55 @@ fun Homescreen(
                                         }
                                     }
                                 )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
+
+                                // OTP Detection Status (SMS)
+                                StatusRow(
+                                    label = "SMS OTP Detection",
+                                    isActive = isSmsPermissionGranted,
+                                    fontFamily = robotoFontFamily,
+                                    scale = scale,
+                                    onClick = {
+                                        if (!isSmsPermissionGranted) {
+                                            try {
+                                                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                                    data = Uri.parse("package:${context.packageName}")
+                                                }
+                                                context.startActivity(intent)
+                                                Toast.makeText(context, "Enable SMS Permissions", Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Could not open App Settings", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                )
+
+                                HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
+
+                                // Email OTP Detection Status
+                                StatusRow(
+                                    label = "Email OTP Detection",
+                                    isActive = isNotificationListenerEnabled,
+                                    fontFamily = robotoFontFamily,
+                                    scale = scale,
+                                    onClick = {
+                                        if (!isNotificationListenerEnabled) {
+                                            try {
+                                                val intent = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS)
+                                                context.startActivity(intent)
+                                                Toast.makeText(context, "Enable Notification Access for ClipSync", Toast.LENGTH_LONG).show()
+                                            } catch (e: Exception) {
+                                                Toast.makeText(context, "Could not open Notification Settings", Toast.LENGTH_SHORT).show()
+                                            }
+                                        }
+                                    }
+                                )
                             }
                         }
                         
                         // Show warning if ANY critical permission is missing
-                        if (!isAccessibilityEnabled || !isBatteryUnrestricted) {
+                        if (!isAccessibilityEnabled || !isBatteryUnrestricted || !isSmsPermissionGranted || !isNotificationListenerEnabled) {
                             Spacer(modifier = Modifier.height((12 * scale).dp))
                             Row(verticalAlignment = Alignment.Top) {
                                 Icon(
@@ -439,6 +530,46 @@ fun Homescreen(
                                     Toast.makeText(context, "Failed to clear", Toast.LENGTH_SHORT).show()
                                 }
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height((16 * scale).dp))
+
+                        // Test OTP Detection
+                        ActionButton(
+                            text = "Test OTP Detection",
+                            icon = Icons.Default.CheckCircle,
+                            backgroundColor = Color(0xFF34C759), // Green
+                            fontFamily = robotoFontFamily,
+                            scale = scale
+                        ) {
+                            // Generate a test OTP code
+                            val testOTP = (100000..999999).random().toString()
+
+                            // Copy to clipboard using ClipboardGhostActivity
+                            ClipboardGhostActivity.copyToClipboard(context, testOTP)
+
+                            // Send OTP notification to Mac
+                            OTPNotificationService.notifyOTPDetected(context, testOTP)
+
+                            // Show confirmation
+                            Toast.makeText(
+                                context,
+                                "Test OTP sent to Mac: $testOTP",
+                                Toast.LENGTH_LONG
+                            ).show()
+                        }
+
+                        Spacer(modifier = Modifier.height((16 * scale).dp))
+
+                        // Reset Pairing
+                        ActionButton(
+                            text = "Reset Pairing",
+                            icon = Icons.Default.Refresh,
+                            backgroundColor = Color(0xFFFF9500), // Orange
+                            fontFamily = robotoFontFamily,
+                            scale = scale
+                        ) {
+                            showResetDialog = true
                         }
                     }
                 }
@@ -651,8 +782,12 @@ private fun checkServiceStatus(context: Context, service: Class<*>): Boolean {
     return enabledServices.any { it.resolveInfo.serviceInfo.name == service.name }
 }
 
-@Preview(showBackground = true, widthDp = 360, heightDp = 800)
-@Composable
-fun HomescreenPagePreview() {
-    Homescreen()
+private fun isNotificationServiceEnabled(context: Context): Boolean {
+    val packageName = context.packageName
+    val enabledListeners = Settings.Secure.getString(
+        context.contentResolver,
+        "enabled_notification_listeners"
+    )
+    return enabledListeners?.contains(packageName) == true
 }
+

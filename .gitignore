@@ -64,3 +64,19 @@ Secrets.kt
 *.zip
 *.tar
 *.gz
+
+# Firebase
+.firebase/
+.firebaserc
+firebase-debug.log
+firebase-debug.*.log
+firestore-debug.log
+ui-debug.log
+firestore.indexes.json
+firestore.rules
+storage.rules
+database.rules.json
+functions/node_modules/
+functions/package-lock.json
+functions/.runtimeconfig.json
+.firebase-hosting-*

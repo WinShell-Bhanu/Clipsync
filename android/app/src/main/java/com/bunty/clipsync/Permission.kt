@@ -40,7 +40,6 @@ import android.widget.Toast
 import android.util.Log
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.tooling.preview.Preview
 
 @Composable
 fun PermissionPage(onFinishSetup: () -> Unit = {}) {
@@ -436,9 +435,6 @@ fun isAccessibilityServiceEnabled(context: android.content.Context): Boolean {
             Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
         ) ?: return false
 
-        Log.d("AccessibilityCheck", "Enabled Services: $enabledServices")
-
-        // Check if ANY of these patterns match
         val possibleNames = listOf(
             "com.bunty.clipsync/com.bunty.clipsync.ClipboardAccessibilityService",
             "com.bunty.clipsync/.ClipboardAccessibilityService",
@@ -460,11 +456,4 @@ fun isAccessibilityServiceEnabled(context: android.content.Context): Boolean {
 }
 
 
-@Preview(showBackground = true, widthDp = 412, heightDp = 915)
-@Composable
-fun PermissionPreview() {
-    MaterialTheme {
-        PermissionPage()
-    }
-}
 

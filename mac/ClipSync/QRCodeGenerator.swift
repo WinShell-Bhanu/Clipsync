@@ -12,78 +12,56 @@ class QRCodeGenerator: ObservableObject {
     private let context = CIContext()
     private let filter = CIFilter.qrCodeGenerator()
     
-    // --- Dynamic Secret Management ---
-    // Generates/Retrieves a persistent secret key for this Mac
     private var sharedSecretHex: String {
         get {
             if let savedKey = UserDefaults.standard.string(forKey: "encryption_key") {
                 return savedKey
             }
-            // Generate new key if missing
             let newKey = generateRandomHexKey()
             UserDefaults.standard.set(newKey, forKey: "encryption_key")
             return newKey
         }
     }
     
-    // --- Encryption Handshake ---
-    // Encrypts Mac Identity + Region + Secret into a QR payload
     func generateQRCode() {
         let macDeviceId = DeviceManager.shared.getDeviceId()
-        
-        // Format: JSON string
         let macName = DeviceManager.shared.getMacName()
         let currentRegion = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
         
         let jsonDict: [String: String] = [
             "macId": macDeviceId,
             "deviceName": macName,
-            "server": currentRegion, //  Tell Phone which server to use
-            "secret": sharedSecretHex //  Send Dynamic Key
+            "server": currentRegion,
+            "secret": sharedSecretHex
         ]
         
         var plainTextData: Data?
         if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict) {
             plainTextData = jsonData
         } else {
-             // Fallback manual JSON
              let jsonString = "{\"macId\":\"\(macDeviceId)\",\"deviceName\":\"\(macName)\",\"server\":\"\(currentRegion)\",\"secret\":\"\(sharedSecretHex)\"}"
              plainTextData = jsonString.data(using: .utf8)
         }
         
-        guard let dataToEncrypt = plainTextData else {
-            print(" Failed to prepare data for encryption")
+        guard let dataToEncrypt = plainTextData,
+              let jsonString = String(data: dataToEncrypt, encoding: .utf8) else {
             return
         }
 
-        // NO ENCRYPTION for Initial Handshake
-        // The QR code must be readable by the phone to get the Secret Key.
-        if let jsonString = String(data: dataToEncrypt, encoding: .utf8) {
-             pairingCode = jsonString
-             print(" Plaintext Pairing Code: \(pairingCode)")
-        } else {
-             print(" Failed to convert data to string")
-             return
-        }
+        pairingCode = jsonString
         
-        print(" Generating QR Code...")
-        
-        // --- Image Generation (CoreImage) ---
         let data = Data(pairingCode.utf8)
         filter.setValue(data, forKey: "inputMessage")
         filter.setValue("L", forKey: "inputCorrectionLevel")
         
         guard let outputImage = filter.outputImage else {
-            print(" Failed to generate QR code")
             return
         }
         
-        // Scale up for clarity (10x larger)
         let transform = CGAffineTransform(scaleX: 10, y: 10)
         let scaledImage = outputImage.transformed(by: transform)
         
         guard let cgImage = context.createCGImage(scaledImage, from: scaledImage.extent) else {
-            print(" Failed to create CGImage")
             return
         }
         
@@ -91,8 +69,6 @@ class QRCodeGenerator: ObservableObject {
             width: scaledImage.extent.width,
             height: scaledImage.extent.height
         ))
-        
-        print(" QR Code generated successfully!")
     }
     
     // Helper to convert Hex String to Data

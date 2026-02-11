@@ -36,10 +36,8 @@ object LocationHelper {
 
                     val json = JSONObject(response.toString())
                     val countryCode = json.optString("countryCode", "")
-                    Log.d("LocationHelper", "Detected Country: $countryCode")
                     countryCode
                 } else {
-                    Log.e("LocationHelper", "Failed to get location: ${connection.responseCode}")
                     null
                 }
             } catch (e: Exception) {

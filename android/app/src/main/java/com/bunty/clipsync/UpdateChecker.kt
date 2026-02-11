@@ -46,10 +46,7 @@ object UpdateChecker {
                     val cleanCurrent = currentVersion.removePrefix("v")
 
                     if (isVersionNewer(cleanCurrent, cleanLatest)) {
-                        Log.d(TAG, "Update found: $latestTag (Current: $currentVersion)")
                         return@withContext UpdateInfo(latestTag, htmlUrl, body)
-                    } else {
-                        Log.d(TAG, "App is up to date ($currentVersion vs $latestTag)")
                     }
                 } else {
                     Log.e(TAG, "GitHub API returned code: ${connection.responseCode}")

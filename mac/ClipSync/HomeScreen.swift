@@ -363,7 +363,6 @@ struct HomeScreen: View {
             let sealedBox = try AES.GCM.seal(data, using: key)
             return sealedBox.combined?.base64EncodedString() ?? ""
         } catch {
-            print(" Encryption test failed: \(error)")
             return ""
         }
     }
@@ -379,7 +378,6 @@ struct HomeScreen: View {
             let decryptedData = try AES.GCM.open(sealedBox, using: key)
             return String(data: decryptedData, encoding: .utf8)
         } catch {
-            print(" Decryption test failed: \(error)")
             return nil
         }
     }

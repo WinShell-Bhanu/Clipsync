@@ -169,14 +169,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         pop.contentViewController = NSHostingController(rootView: MenuBarView())
         self.popover = pop
         
-        // Observe Pairing State for Dock & Menu Bar
+        // Setup OTP Listener Delegate
+        OTPNotificationManager.shared.delegate = self
+        
+        // Observe Pairing State for Dock, Menu Bar & OTP Listener
         PairingManager.shared.$isPaired
             .receive(on: DispatchQueue.main)
             .sink { [weak self] paired in
                 self?.updateMenuBarState(show: paired) // Menu Bar Icon
                 self?.updateDockPolicy()               // Dock Icon
+                
+                // Start/Stop OTP Listener based on pairing state
+                if paired {
+                    OTPNotificationManager.shared.startListening()
+                } else {
+                    OTPNotificationManager.shared.stopListening()
+                }
             }
             .store(in: &cancellables)
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        OTPNotificationManager.shared.stopListening()
     }
     
     // Window Observers are NO LONGER needed for Dock Policy
@@ -226,6 +240,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
     
     @objc func togglePopover(_ sender: AnyObject?) {
+        // Feature: If an OTP arrived recently (< 1 min), clicking the icon re-shows the bubbles
+        // instead of opening the standard menu.
+        if OTPNotificationManager.shared.hasRecentOTP {
+            OTPNotificationManager.shared.reshowLastBubble()
+            return
+        }
+        
         guard let button = statusItem?.button, let popover = popover else { return }
         
         if popover.isShown {

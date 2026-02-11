@@ -75,9 +75,8 @@ struct ConnectedScreen: View {
             .opacity(buttonOpacity)
         }
         .frame(width: 590, height: 590)
-        .ignoresSafeArea() // Extends to window edges
+        .ignoresSafeArea()
         .onAppear {
-            print(" Starting clipboard sync...")
             ClipboardManager.shared.startMonitoring()
             ClipboardManager.shared.listenForAndroidClipboard()
             playEntranceAnimations()

@@ -5,6 +5,7 @@ import android.accessibilityservice.AccessibilityServiceInfo
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
@@ -83,6 +84,15 @@ class ClipboardAccessibilityService : AccessibilityService() {
         }
     }
 
+    private fun isGameApp(packageName: String): Boolean {
+        return try {
+            val appInfo = packageManager.getApplicationInfo(packageName, 0)
+            appInfo.category == ApplicationInfo.CATEGORY_GAME
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
@@ -99,6 +109,12 @@ class ClipboardAccessibilityService : AccessibilityService() {
         if (event == null) return
 
         try {
+            // Skip monitoring for gaming apps to save CPU and battery
+            val eventPackageName = event.packageName?.toString()
+            if (eventPackageName != null && isGameApp(eventPackageName)) {
+                return
+            }
+
             val eventTime = event.eventTime
             // Debounce: Ignore events if they happen too close to the last one (1 second)
             // This prevents double-triggering if an app shows a Toast AND a Snackbar.

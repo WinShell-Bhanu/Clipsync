@@ -1,26 +1,22 @@
 package com.bunty.clipsync
 
-
 import android.os.Build
-import android.util.Log
 import android.graphics.RenderEffect
 import android.graphics.Shader
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.*
-import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.Font
@@ -28,7 +24,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -38,19 +33,9 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalConfiguration
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlin.math.min
-
-val BackgroundColor = Color(0xFFB1C2F6)
 
 @Composable
 fun LandingScreen(
@@ -66,7 +51,6 @@ fun LandingScreen(
     val heightScale = screenHeight.value / 915f
     val scale = min(widthScale, heightScale)
 
-    var isPulsing by remember { mutableStateOf(false) }
     var isExiting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val buttonScale = remember { Animatable(1f) }
@@ -75,15 +59,6 @@ fun LandingScreen(
     var showTitle by remember { mutableStateOf(false) }
     var showSubtitle by remember { mutableStateOf(false) }
     var showCard by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        delay(100)
-        showTitle = true
-        delay(200)
-        showSubtitle = true
-        delay(200)
-        showCard = true
-    }
 
     // --- Region Auto-Detection ---
     // Checks IP location on first launch to route EU users to US servers (Lower Latency)
@@ -96,7 +71,7 @@ fun LandingScreen(
             // European Countries (Better latency to US than IN)
             val euCountries = setOf("ES", "FR", "DE", "IT", "UK", "GB", "NL", "BE", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "AT", "CH", "PL", "CZ", "HU", "RO")
             
-            if (countryCode in listOf("US", "CA", "MX")) {
+            if (countryCode in listOf("US", "CA", "MX") || countryCode in euCountries) {
                 DeviceManager.setTargetRegion(context, "US")
             } else {
                 DeviceManager.setTargetRegion(context, "IN")
@@ -147,7 +122,6 @@ fun LandingScreen(
                     onGetStartedClick = {
                         scope.launch {
                             // 1. Bounce Effect
-                            isPulsing = true // Local pulsing for button only if needed, or remove
                             buttonScale.animateTo(0.8f, animationSpec = tween(100))
                             buttonScale.animateTo(
                                 1f,
@@ -160,7 +134,6 @@ fun LandingScreen(
                             // 2. Trigger Exit
                             delay(100)
                             isExiting = true
-                            isPulsing = false
 
                             // 3. Wait for exit anim then navigate
                             delay(300)
@@ -280,7 +253,6 @@ fun GlassmorphismCard(
 
     // Responsive dimensions
     val cardTopPadding = (338 * heightScale).dp
-    val cardWidth = screenWidth // Full width of the screen 
     val cardHeight = (screenHeight.value * 0.63f).dp // Proportional height
     val cornerRadius = (28 * scale).coerceIn(20f, 28f).dp
 
@@ -455,9 +427,9 @@ fun GlassmorphismCard(
 
 @Composable
 fun GetStartedButton(
+    modifier: Modifier = Modifier,
     scale: Float = 1f,
-    onClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    onClick: () -> Unit = {}
 ) {
     val configuration = LocalConfiguration.current
     val screenWidth = configuration.screenWidthDp.dp
@@ -491,8 +463,7 @@ fun GetStartedButton(
             fontSize = fontSize,
             fontFamily = FontFamily(Font(R.font.roboto_medium)),
             fontWeight = FontWeight.Medium,
-            letterSpacing = (-0.03f * 22).sp,
-            }
-        }
+            letterSpacing = (-0.03f * 22).sp
+        )
     }
 }

@@ -48,10 +48,7 @@ object OTPNotificationService {
                 FirestoreManager.getDb(context).collection("notifications")
                     .add(notificationData)
                     .addOnSuccessListener { documentReference ->
-                        GlobalScope.launch(Dispatchers.IO) {
-                            delay(10000)
-                            documentReference.delete()
-                        }
+                        Log.d(TAG, "OTP notification sent successfully: ${documentReference.id}")
                     }
                     .addOnFailureListener { exception ->
                         Log.e(TAG, "Failed to send OTP notification", exception)

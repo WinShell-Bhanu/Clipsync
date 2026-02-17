@@ -65,6 +65,13 @@ Secrets.kt
 *.tar
 *.gz
 
+# Documentation & Notes (except root README/CODE_OF_CONDUCT)
+docs/
+notes/
+**/notes/
+**/docs/
+*.txt
+
 # Firebase
 .firebase/
 .firebaserc

@@ -3,39 +3,40 @@ package com.bunty.clipsync
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
-import android.os.Build
-import android.os.Handler
-import android.os.Looper
 import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
 import android.widget.Toast
 
 /**
- * OTP Listening Service - Automatically detects OTP codes from incoming SMS messages
+ * OTPListeningService is a [BroadcastReceiver] that listens for incoming SMS messages
+ * and automatically extracts OTP codes from them.
  *
- * Detection Logic:
- * 1. Listens for incoming SMS messages
- * 2. Checks for trigger keywords: "OTP", "verification", "code", etc.
- * 3. Extracts 4-8 digit numeric patterns
- * 4. Validates patterns (no special chars, no letters between digits)
- * 5. Auto-copies detected OTP to clipboard using ClipboardGhostActivity
+ * **How it works:**
+ * 1. Receives the `SMS_RECEIVED` broadcast (requires READ_SMS + RECEIVE_SMS permissions).
+ * 2. Checks each message body for OTP-related keywords (e.g. "otp", "verification", "code").
+ * 3. If a keyword match is found, tries to extract a 4–8 digit numeric code using two regex patterns.
+ * 4. Copies the extracted OTP to the clipboard via [ClipboardGhostActivity] and
+ *    syncs it to the Mac via [OTPNotificationService].
  *
- * Note: For email OTP detection, see EmailOTPListenerService
+ * A 1-second debounce ([MIN_PROCESSING_INTERVAL]) prevents duplicate processing when
+ * a single SMS arrives as multiple PDU fragments.
+ *
+ * Registered in AndroidManifest.xml with `<receiver>` and the `SMS_RECEIVED` intent-filter.
  */
 class OTPListeningService : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "OTPListeningService"
 
-        // Prevent duplicate processing within short time window
+        // Debounce: ignore a second SMS that arrives within 1 second of the first
         private var lastProcessedTime = 0L
-        private const val MIN_PROCESSING_INTERVAL = 1000L // 1 second
+        private const val MIN_PROCESSING_INTERVAL = 1000L
 
-        // Handler for UI operations (shared across all broadcasts)
-        private val mainHandler = Handler(Looper.getMainLooper())
-
-        // Trigger keywords to identify OTP messages
+        /**
+         * Keywords that indicate an SMS likely contains an OTP.
+         * Checked case-insensitively against the full message body.
+         */
         private val OTP_KEYWORDS = listOf(
             "otp",
             "verification",
@@ -50,15 +51,23 @@ class OTPListeningService : BroadcastReceiver() {
         )
     }
 
+    /**
+     * Entry point for incoming SMS broadcasts.
+     *
+     * Guards:
+     * - Ignores non-SMS_RECEIVED intents.
+     * - Applies a 1-second debounce to avoid duplicate processing.
+     * - Processes all PDU messages, stops at the first successfully extracted OTP.
+     */
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) {
-            return
-        }
+        // Only process SMS_RECEIVED broadcasts
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
 
+        val appContext = context.applicationContext
         val currentTime = System.currentTimeMillis()
-        if (currentTime - lastProcessedTime < MIN_PROCESSING_INTERVAL) {
-            return
-        }
+
+        // Debounce: skip if we just processed an SMS within the last second
+        if (currentTime - lastProcessedTime < MIN_PROCESSING_INTERVAL) return
 
         try {
             val messages = extractSmsMessages(intent)
@@ -72,17 +81,12 @@ class OTPListeningService : BroadcastReceiver() {
                     if (otpCode != null) {
                         lastProcessedTime = currentTime
 
-                        ClipboardGhostActivity.copyToClipboard(context, otpCode)
-                        OTPNotificationService.notifyOTPDetected(context, otpCode)
-
-                        mainHandler.post {
-                            Toast.makeText(
-                                context,
-                                "OTP Copied: $otpCode",
-                                Toast.LENGTH_SHORT
-                            ).show()
-                        }
-                        break
+                        // Copy OTP to Android clipboard so the user can paste it
+                        ClipboardGhostActivity.copyToClipboard(appContext, otpCode)
+                        // Push OTP notification to the paired Mac via Firestore
+                        OTPNotificationService.notifyOTPDetected(appContext, otpCode)
+                        Toast.makeText(appContext, "OTP Copied: $otpCode", Toast.LENGTH_SHORT).show()
+                        break  // stop after the first OTP found in the message batch
                     }
                 }
             }
@@ -93,107 +97,91 @@ class OTPListeningService : BroadcastReceiver() {
     }
 
     /**
-     * Extract SMS messages from intent (supports multiple formats)
+     * Extracts the list of [SmsMessage] objects from a `SMS_RECEIVED` broadcast intent.
+     *
+     * Uses [Telephony.Sms.Intents.getMessagesFromIntent] which handles multi-part messages
+     * (PDU reassembly) automatically. Returns an empty list on any error.
      */
     private fun extractSmsMessages(intent: Intent): List<SmsMessage> {
-        val messages = mutableListOf<SmsMessage>()
-
-        try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-                // Modern Android - use Telephony API
-                val smsMessages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
-                messages.addAll(smsMessages)
-            } else {
-                // Legacy Android
-                val pdus = intent.extras?.get("pdus") as? Array<*>
-                pdus?.forEach { pdu ->
-                    val pduBytes = pdu as? ByteArray ?: return@forEach
-                    val message = SmsMessage.createFromPdu(pduBytes)
-                    messages.add(message)
-                }
-            }
+        return try {
+            Telephony.Sms.Intents.getMessagesFromIntent(intent).toList()
         } catch (e: Exception) {
             Log.e(TAG, "Error extracting SMS messages", e)
+            emptyList()
         }
-
-        return messages
     }
 
     /**
-     * Check if message contains OTP-related keywords
+     * Returns `true` if [message] contains at least one word from [OTP_KEYWORDS].
+     * Comparison is case-insensitive.
      */
     private fun containsOTPKeyword(message: String): Boolean {
         val lowerMessage = message.lowercase()
-        return OTP_KEYWORDS.any { keyword ->
-            lowerMessage.contains(keyword)
-        }
+        return OTP_KEYWORDS.any { keyword -> lowerMessage.contains(keyword) }
     }
 
     /**
-     * Extract OTP code from message using smart regex patterns
+     * Attempts to extract a numeric OTP code from [message] using two regex patterns:
      *
-     * Rules:
-     * - Find 4-8 digit sequences
-     * - No special characters before/after
-     * - No letters between digits
-     * - Clean digit-only sequences
+     * - **Pattern 1**: A standalone 4–8 digit sequence (`\b(\d{4,8})\b`).
+     * - **Pattern 2**: Two groups of 3–4 digits separated by a space or dash (e.g. "123 456").
+     *
+     * Each candidate from Pattern 1 is validated by [isValidOTP] before being returned.
+     * Pattern 2 is used as a fallback.
+     *
+     * @return The extracted OTP string, or `null` if none was found.
      */
     private fun extractOTP(message: String): String? {
-        // Pattern 1: Find standalone digit sequences (4-8 digits)
-        // \b ensures word boundary (no special chars or letters adjacent)
+        // Pattern 1: plain 4–8 digit number bounded by word boundaries
         val pattern1 = Regex("""\b(\d{4,8})\b""")
 
-        // Pattern 2: Digits separated by space/dash (e.g., "1234 5678" or "123-456")
-        // We'll extract and combine them if they form valid OTP length
+        // Pattern 2: split-format OTP like "123 456" or "123-456"
         val pattern2 = Regex("""(\d{3,4})[\s\-](\d{3,4})""")
 
-        // Try Pattern 1 first (standalone digits)
-        val match1 = pattern1.findAll(message)
-        for (match in match1) {
+        // Try all Pattern 1 matches and return the first one that passes validation
+        for (match in pattern1.findAll(message)) {
             val code = match.groupValues[1]
-
-            // Validate: Must be clean digits, no adjacent special chars
             if (isValidOTP(code, message, match.range)) {
                 return code
             }
         }
 
-        // Try Pattern 2 (space/dash separated)
+        // Fallback: try Pattern 2 and combine the two groups
         val match2 = pattern2.find(message)
         if (match2 != null) {
             val combined = match2.groupValues[1] + match2.groupValues[2]
-            if (combined.length in 4..8) {
-                return combined
-            }
+            if (combined.length in 4..8) return combined
         }
 
         return null
     }
 
     /**
-     * Validate extracted OTP code
-     * - Check surroundings for special characters
-     * - Ensure it's not part of a larger number (like phone number)
+     * Validates that a numeric [code] candidate is a genuine OTP and not part of a longer
+     * number (e.g. a phone number or order ID).
+     *
+     * Rules:
+     * - Length must be 4–8 digits.
+     * - The characters immediately before and after the code must not be digits.
+     * - The surrounding characters must be whitespace, punctuation, or letters.
+     *
+     * @param code        The digit string to validate.
+     * @param fullMessage The original message text (used for boundary checks).
+     * @param range       The character range of [code] within [fullMessage].
      */
     private fun isValidOTP(code: String, fullMessage: String, range: IntRange): Boolean {
-        if (code.length !in 4..8) {
-            return false
-        }
+        if (code.length !in 4..8) return false
 
+        // Check the character immediately before and after the digit sequence
         val before = if (range.first > 0) fullMessage[range.first - 1] else ' '
-        val after = if (range.last < fullMessage.length - 1) fullMessage[range.last + 1] else ' '
+        val after  = if (range.last  < fullMessage.length - 1) fullMessage[range.last + 1] else ' '
 
-        if (before.isDigit() || after.isDigit()) {
-            return false
-        }
+        // Reject if it is part of a longer number
+        if (before.isDigit() || after.isDigit()) return false
 
         val allowedChars = setOf(' ', '\n', '\r', '\t', '.', ':', '-', ',', '(', ')', '[', ']')
-        if (!allowedChars.contains(before) && !before.isLetter() && before != ' ') {
-            return false
-        }
-        if (!allowedChars.contains(after) && !after.isLetter() && after != ' ') {
-            return false
-        }
+        if (!allowedChars.contains(before) && !before.isLetter() && before != ' ') return false
+        if (!allowedChars.contains(after)  && !after.isLetter()  && after  != ' ') return false
 
         return true
     }

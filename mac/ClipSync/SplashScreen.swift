@@ -1,10 +1,12 @@
-//
-// SplashScreen.swift
-// ClipSync
-//
+
+
 
 import SwiftUI
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates splash screen behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct SplashScreen: View {
     private let frameSize: CGFloat = 590
 
@@ -18,19 +20,19 @@ struct SplashScreen: View {
 
     var body: some View {
         ZStack {
-            // Dark background (stays dark around the reveal)
+
             Color.black
                 .opacity(0.95)
                 .ignoresSafeArea()
 
-            // Mesh reveal (starts as tiny orb at center)
+
             MeshBackground(
                 introProgress: progress,
                 shouldAnimate: startOscillation
             )
             .frame(width: frameSize, height: frameSize)
 
-            // Landing elements appear after mesh fills screen
+
             if showLanding {
                 LandingScreenAnimatedContent()
                     .transition(AnyTransition.opacity.combined(with: .scale(scale: 0.98)))
@@ -38,18 +40,18 @@ struct SplashScreen: View {
         }
         .frame(width: frameSize, height: frameSize)
         .onAppear {
-            // --- Reveal Sequence ---
-            // 1. Expand the orb from tiny → full 590x590 (Faster: 1.8s)
+
+
             withAnimation(.easeInOut(duration: 1.8)) {
                 progress = 1.0
             }
 
-            // 2. Start the mesh oscillation near the end of expansion
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 startOscillation = true
             }
 
-            // 3. Show landing elements after mesh is full
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.6) {
                 withAnimation(.easeInOut(duration: 0.6)) {
                     showLanding = true
@@ -60,7 +62,10 @@ struct SplashScreen: View {
     }
 }
 
-// MARK: - Landing content (appears after mesh expansion)
+
+// Purpose: Struct that models landing screen animated content behavior in this module.
+// Responsibilities: Encapsulates landing screen animated content behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct LandingScreenAnimatedContent: View {
     @State private var showTitle = false
     @State private var showLogo = false
@@ -74,7 +79,7 @@ struct LandingScreenAnimatedContent: View {
 
     var body: some View {
         ZStack {
-            // Title
+
             if showTitle {
                 VStack(spacing: 8) {
                     Text("ClipSync")
@@ -103,7 +108,7 @@ struct LandingScreenAnimatedContent: View {
                 .transition(.move(edge: .top).combined(with: .opacity))
             }
 
-            // Logo
+
             if showLogo {
                 Image("logo")
                     .resizable()
@@ -113,7 +118,7 @@ struct LandingScreenAnimatedContent: View {
                     .transition(.scale(scale: 0.92).combined(with: .opacity))
             }
 
-            // Get Started Button
+
             if showButton {
                 Button(action: { navigateToQR = true }) {
                     Text("Get Started")
@@ -150,7 +155,7 @@ struct LandingScreenAnimatedContent: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            // Footer
+
             if showFooter {
                 VStack(spacing: 15) {
                     Button(action: { print("Learn More tapped") }) {
@@ -174,7 +179,7 @@ struct LandingScreenAnimatedContent: View {
             }
         }
         .frame(width: 590, height: 590)
-        // REMOVED NavigationStack - ContentView already provides it
+
         .navigationDestination(isPresented: $navigateToQR) {
             QRGenScreen()
         }

@@ -1,13 +1,15 @@
-//
-// ContentView.swift
-// ClipSync
-//
+
+
 
 import SwiftUI
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates content view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct ContentView: View {
     @StateObject private var pairingManager = PairingManager.shared
-    // Only show splash if NOT paired
+
     @State private var showSplash = !PairingManager.shared.isPaired
 
     #if DEBUG
@@ -16,7 +18,7 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            // The actual content (NO NavigationStack wrapper)
+
             if pairingManager.isPaired {
                 if pairingManager.isSetupComplete {
                     NavigationStack {
@@ -30,8 +32,8 @@ struct ContentView: View {
             } else {
                 LandingScreen(isBackgroundPaused: showSplash)
             }
-            
-            // Splash overlay
+
+
             if showSplash {
                 SplashScreen()
                     .transition(.opacity)

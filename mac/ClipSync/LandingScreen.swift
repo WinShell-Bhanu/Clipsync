@@ -1,18 +1,19 @@
-//
-// LandingScreen.swift
-// ClipSync - AESTHETIC ANIMATED VERSION
-//
-// Created by Bhanu Gothwal on 21/09/25.
+
+
 
 import Foundation
 import SwiftUI
 import AppKit
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates landing screen behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct LandingScreen: View {
-    
+
     @State private var navigateToQR = false
     var isBackgroundPaused: Bool = false
-    
+
     #if DEBUG
     @ObserveInjection var forceRedraw
     #endif
@@ -21,20 +22,20 @@ struct LandingScreen: View {
         NavigationStack {
             GeometryReader { geometry in
                 ZStack {
-                    // --- Animated Mesh ---
+
                     MeshBackground(shouldAnimate: !isBackgroundPaused)
                         .ignoresSafeArea()
-                    
-                    // --- Content Layout ---
+
+
                     ZStack {
-                        // Title Section
+
                         VStack(spacing: 8) {
                             Text("ClipSync")
                                 .font(.custom("SF Pro Display", size: 64))
                                 .fontWeight(.bold)
                                 .kerning(-3)
                                 .foregroundColor(.white)
-                            
+
                             Text("ReImagined the Apple Way")
                                 .font(.custom("SF Pro Display", size: 28))
                                 .fontWeight(.semibold)
@@ -52,15 +53,15 @@ struct LandingScreen: View {
                                 )
                         }
                         .offset(y: -220)
-                        
-                        // Logo (Center)
+
+
                         Image("logo")
                             .resizable()
                             .aspectRatio(contentMode: .fit)
                             .frame(width: 175, height: 165)
                             .offset(y: -20)
-                        
-                        // Get Started Button
+
+
                         Button(action: {
                             navigateToQR = true
                         }) {
@@ -108,8 +109,8 @@ struct LandingScreen: View {
                         }
                         .buttonStyle(.plain)
                         .offset(y: 170)
-                        
-                        // Footer Links (Bottom)
+
+
                         VStack(spacing: 25) {
                             Button(action: {
                                 print("Learn More tapped")
@@ -120,7 +121,7 @@ struct LandingScreen: View {
                                     .foregroundColor(Color(red: 0.216, green: 0.341, blue: 0.620))
                             }
                             .buttonStyle(.plain)
-                            
+
                             Button(action: {
                                 print("About tapped")
                             }) {

@@ -2,6 +2,10 @@ import SwiftUI
 import Lottie
 import Shimmer
 
+
+// Purpose: Struct that models otpnotification bubble behavior in this module.
+// Responsibilities: Encapsulates otpnotification bubble behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct OTPNotificationBubble: View {
     let otpCode: String
     @State private var opacity: Double = 0
@@ -9,16 +13,16 @@ struct OTPNotificationBubble: View {
     @State private var offset: CGFloat = 10
     @State private var isHovering: Bool = false
     @State private var isShimmerActive: Bool = true
-    
+
     private let animationId = UUID()
-    
+
     var body: some View {
         VStack(spacing: 8) {
             TickLottieView()
                 .frame(width: 50, height: 50)
                 .scaleEffect(1.2)
                 .id(animationId)
-            
+
             Text(isHovering ? otpCode : String(repeating: "*", count: otpCode.count))
                 .font(.system(size: 20, weight: .bold, design: .rounded))
                 .foregroundColor(.primary)
@@ -35,7 +39,7 @@ struct OTPNotificationBubble: View {
                         isHovering = hovering
                     }
                 }
-            
+
             Text("OTP Copied Successfully")
                 .font(.system(size: 12, weight: .medium))
                 .foregroundColor(.white.opacity(0.9))
@@ -62,11 +66,11 @@ struct OTPNotificationBubble: View {
                 scale = 1
                 offset = 0
             }
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 4.5) {
                 isShimmerActive = false
             }
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
                 withAnimation(.easeOut(duration: 0.3)) {
                     opacity = 0
@@ -78,31 +82,40 @@ struct OTPNotificationBubble: View {
     }
 }
 
+
+// Purpose: Class that models otpbubble window behavior in this module.
+// Responsibilities: Encapsulates otpbubble window behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 class OTPBubbleWindow: NSWindow {
     private var autoCloseTimer: Timer?
-    
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: otpCode, statusItemButton.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(otpCode: String, statusItemButton: NSStatusBarButton) {
         let buttonFrame = statusItemButton.window?.convertToScreen(statusItemButton.frame) ?? .zero
-        
+
         let bubbleWidth: CGFloat = 220
         let bubbleHeight: CGFloat = 140
         let xPosition = buttonFrame.midX - (bubbleWidth / 2)
         let yPosition = buttonFrame.minY - bubbleHeight - 8
-        
+
         let contentRect = NSRect(
             x: xPosition,
             y: yPosition,
             width: bubbleWidth,
             height: bubbleHeight
         )
-        
+
         super.init(
             contentRect: contentRect,
             styleMask: [.borderless],
             backing: .buffered,
             defer: false
         )
-        
+
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
@@ -111,20 +124,25 @@ class OTPBubbleWindow: NSWindow {
         self.isMovable = false
         self.ignoresMouseEvents = false
         self.isReleasedWhenClosed = false
-        
+
         let hostingView = NSHostingView(rootView: OTPNotificationBubble(otpCode: otpCode))
         hostingView.layer?.backgroundColor = NSColor.clear.cgColor
         self.contentView = hostingView
-        
-        self.autoCloseTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: false) { [weak self] _ in
+
+        self.autoCloseTimer = Timer.scheduledTimer(withTimeInterval: 5.5, repeats: false) { [weak self] _ in
             self?.cleanup()
         }
     }
-    
+
+
+    // Purpose: Implements the cleanup operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func cleanup() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            
+
             self.autoCloseTimer?.invalidate()
             self.autoCloseTimer = nil
             self.contentView = nil
@@ -132,10 +150,15 @@ class OTPBubbleWindow: NSWindow {
             self.close()
         }
     }
-    
+
     override var canBecomeKey: Bool { false }
     override var canBecomeMain: Bool { false }
-    
+
+
+    // Purpose: Finalizes the instance before deallocation.
+    // Parameters: No external parameters.
+    // Returns: Void.
+    // Notes: Release observers, timers, and retained resources here.
     deinit {
         autoCloseTimer?.invalidate()
         autoCloseTimer = nil

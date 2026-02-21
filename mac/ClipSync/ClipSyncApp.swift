@@ -1,7 +1,6 @@
-//
-// ClipSyncApp.swift
-// ClipSync
-//
+
+
+
 import SwiftUI
 import FirebaseCore
 import AppKit
@@ -9,33 +8,38 @@ import Combine
 import IOKit.pwr_mgt
 
 @main
+
+
+// Purpose: Struct that models clip sync app behavior in this module.
+// Responsibilities: Encapsulates clip sync app behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct ClipSyncApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var pairingManager = PairingManager.shared
-    
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: No parameters.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init() {
-        // Initialize default user preferences
+
 
         UserDefaults.standard.register(defaults: [
             "syncToMac": true,
             "syncFromMac": true
         ])
-        
-        // --- Region Auto-Detection (REMOVED) ---
-        // We now rely on Manual Selection in QRGenScreen for the initial setup.
-        // This prevents the app from overriding the user's choice with a potentially wrong auto-detect.
 
-        
-        // --- Firebase & Sync Initialization ---
+
         _ = FirebaseManager.shared
         PairingManager.shared.restorePairing()
-        
+
         if PairingManager.shared.isPaired {
              ClipboardManager.shared.startMonitoring()
              ClipboardManager.shared.listenForAndroidClipboard()
         }
     }
-    
+
     var body: some Scene {
         WindowGroup(id: "main") {
             ContentView()
@@ -58,14 +62,27 @@ struct ClipSyncApp: App {
     }
 }
 
-// MARK: - Window Configurator
+
+// Purpose: Struct that models window configurator behavior in this module.
+// Responsibilities: Encapsulates window configurator behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 private struct WindowConfigurator: NSViewRepresentable {
     let configure: (NSWindow) -> Void
-    
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: configure.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(_ configure: @escaping (NSWindow) -> Void) {
         self.configure = configure
     }
-    
+
+
+    // Purpose: Implements the make nsview operation for this feature.
+    // Parameters: context.
+    // Returns: NSView.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async { [weak view] in
@@ -73,7 +90,12 @@ private struct WindowConfigurator: NSViewRepresentable {
         }
         return view
     }
-    
+
+
+    // Purpose: Updates nsview based on current inputs.
+    // Parameters: nsView, context.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async { [weak nsView] in
             if let win = nsView?.window { configure(win) }
@@ -81,7 +103,7 @@ private struct WindowConfigurator: NSViewRepresentable {
     }
 }
 
-// MARK: - Hot Reloading Support (Debug Only)
+
 #if canImport(HotSwiftUI)
 @_exported import HotSwiftUI
 #elseif canImport(Inject)
@@ -90,11 +112,21 @@ private struct WindowConfigurator: NSViewRepresentable {
 #if DEBUG
 import Combine
 
+
+// Purpose: Class that models injection observer behavior in this module.
+// Responsibilities: Encapsulates injection observer behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 public class InjectionObserver: ObservableObject {
     public static let shared = InjectionObserver()
     @Published var injectionNumber = 0
     var cancellable: AnyCancellable? = nil
     let publisher = PassthroughSubject<Void, Never>()
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: No parameters.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init() {
         cancellable = NotificationCenter.default.publisher(for:
             Notification.Name("INJECTION_BUNDLE_NOTIFICATION"))
@@ -105,13 +137,35 @@ public class InjectionObserver: ObservableObject {
     }
 }
 
+
+// Purpose: Extension that adds focused behavior to an existing type.
+// Responsibilities: Encapsulates swift ui behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 extension SwiftUI.View {
+
+
+    // Purpose: Implements the erase to any view operation for this feature.
+    // Parameters: No parameters.
+    // Returns: some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func eraseToAnyView() -> some SwiftUI.View {
         return AnyView(self)
     }
+
+
+    // Purpose: Implements the enable injection operation for this feature.
+    // Parameters: No parameters.
+    // Returns: some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func enableInjection() -> some SwiftUI.View {
         return eraseToAnyView()
     }
+
+
+    // Purpose: Handles the on injection callback path.
+    // Parameters: bumpState.
+    // Returns: ()) -> some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
         return self
             .onReceive(InjectionObserver.shared.publisher, perform: bumpState)
@@ -121,20 +175,54 @@ extension SwiftUI.View {
 
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 @propertyWrapper
+
+
+// Purpose: Struct that models observe injection behavior in this module.
+// Responsibilities: Encapsulates observe injection behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 public struct ObserveInjection: DynamicProperty {
     @ObservedObject private var iO = InjectionObserver.shared
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: No parameters.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     public init() {}
     public private(set) var wrappedValue: Int {
         get {0} set {}
     }
 }
 #else
+
+
+// Purpose: Extension that adds focused behavior to an existing type.
+// Responsibilities: Encapsulates swift ui behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 extension SwiftUI.View {
     @inline(__always)
+
+
+    // Purpose: Implements the erase to any view operation for this feature.
+    // Parameters: No parameters.
+    // Returns: some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func eraseToAnyView() -> some SwiftUI.View { return self }
     @inline(__always)
+
+
+    // Purpose: Implements the enable injection operation for this feature.
+    // Parameters: No parameters.
+    // Returns: some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func enableInjection() -> some SwiftUI.View { return self }
     @inline(__always)
+
+
+    // Purpose: Handles the on injection callback path.
+    // Parameters: bumpState.
+    // Returns: ()) -> some SwiftUI.View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
         return self
     }
@@ -142,7 +230,18 @@ extension SwiftUI.View {
 
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 @propertyWrapper
+
+
+// Purpose: Struct that models observe injection behavior in this module.
+// Responsibilities: Encapsulates observe injection behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 public struct ObserveInjection {
+
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: No parameters.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     public init() {}
     public private(set) var wrappedValue: Int {
         get {0} set {}
@@ -151,35 +250,41 @@ public struct ObserveInjection {
 #endif
 #endif
 
-// MARK: - App Delegate (SINGLE UNIFIED VERSION)
+
+// Purpose: Class that models app delegate behavior in this module.
+// Responsibilities: Encapsulates app delegate behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var cancellables = Set<AnyCancellable>()
     var assertionID: IOPMAssertionID = 0
-    
+
+
+    // Purpose: Implements the application did finish launching operation for this feature.
+    // Parameters: notification.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationDidFinishLaunching(_ notification: Notification) {
-        // Hide from Dock (Menu Bar App Mode)
-        // REMOVED: Default to regular policy initially, updateDockPolicy will handle it.
-        
-        // Setup Popover
+
+
         let pop = NSPopover()
         pop.contentSize = NSSize(width: 280, height: 400)
         pop.behavior = .transient
         pop.contentViewController = NSHostingController(rootView: MenuBarView())
         self.popover = pop
-        
-        // Setup OTP Listener Delegate
+
+
         OTPNotificationManager.shared.delegate = self
-        
-        // Observe Pairing State for Dock, Menu Bar & OTP Listener
+
+
         PairingManager.shared.$isPaired
             .receive(on: DispatchQueue.main)
             .sink { [weak self] paired in
-                self?.updateMenuBarState(show: paired) // Menu Bar Icon
-                self?.updateDockPolicy()               // Dock Icon
-                
-                // Start/Stop OTP Listener based on pairing state
+                self?.updateMenuBarState(show: paired)
+                self?.updateDockPolicy()
+
+
                 if paired {
                     OTPNotificationManager.shared.startListening()
                 } else {
@@ -188,39 +293,49 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
             .store(in: &cancellables)
     }
-    
+
+
+    // Purpose: Implements the application will terminate operation for this feature.
+    // Parameters: notification.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationWillTerminate(_ notification: Notification) {
         OTPNotificationManager.shared.stopListening()
     }
-    
-    // Window Observers are NO LONGER needed for Dock Policy
-    // Removing them to prevent interference
 
+
+    // Purpose: Updates dock policy based on current inputs.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateDockPolicy() {
-        // New User Requirement:
-        // 1. Setup/Unpaired -> Show Dock Icon (.regular)
-        // 2. Paired -> Hide Dock Icon (.accessory) - EVEN if Settings window is open
-        
+
+
         if PairingManager.shared.isPaired {
-             // Paired Mode: Ghost in the machine (Menu Bar Only)
+
              if NSApp.activationPolicy() != .accessory {
                  NSApp.setActivationPolicy(.accessory)
                  print("Dock Policy: ACCESSORY (Paired)")
              }
         } else {
-            // Setup Mode: Standard App behavior
+
             if NSApp.activationPolicy() != .regular {
                 NSApp.setActivationPolicy(.regular)
                 print("Dock Policy: REGULAR (Unpaired)")
             }
-            
-            // Ensure window is reachable in Setup Mode
+
+
             DispatchQueue.main.async {
                 NSApp.activate(ignoringOtherApps: true)
             }
         }
     }
-    
+
+
+    // Purpose: Updates menu bar state based on current inputs.
+    // Parameters: show.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateMenuBarState(show: Bool) {
         if show {
             if statusItem == nil {
@@ -238,17 +353,22 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             }
         }
     }
-    
+
+
+    // Purpose: Implements the toggle popover operation for this feature.
+    // Parameters: sender.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     @objc func togglePopover(_ sender: AnyObject?) {
-        // Feature: If an OTP arrived recently (< 1 min), clicking the icon re-shows the bubbles
-        // instead of opening the standard menu.
+
+
         if OTPNotificationManager.shared.hasRecentOTP {
             OTPNotificationManager.shared.reshowLastBubble()
             return
         }
-        
+
         guard let button = statusItem?.button, let popover = popover else { return }
-        
+
         if popover.isShown {
             popover.performClose(sender)
         } else {
@@ -256,7 +376,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
         }
     }
-    
+
+
+    // Purpose: Implements the prevent app sleep operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func preventAppSleep() {
         let reason = "ClipSync needs to monitor clipboard" as CFString
         let success = IOPMAssertionCreateWithName(
@@ -265,18 +390,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             reason,
             &assertionID
         )
-        
+
         if success == kIOReturnSuccess {
-            // Sleep prevention successful
+
         } else {
-            // Failed to prevent sleep
+
         }
     }
-    
+
+
+    // Purpose: Implements the application should terminate after last window closed operation for this feature.
+    // Parameters: sender.
+    // Returns: Bool.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
-    
+
+
+    // Purpose: Finalizes the instance before deallocation.
+    // Parameters: No external parameters.
+    // Returns: Void.
+    // Notes: Release observers, timers, and retained resources here.
     deinit {
         NotificationCenter.default.removeObserver(self)
         if assertionID != 0 {

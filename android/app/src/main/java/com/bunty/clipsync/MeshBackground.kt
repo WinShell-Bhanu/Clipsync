@@ -21,11 +21,27 @@ import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.runtime.withFrameNanos
 
+/**
+ * MeshBackground renders an animated gradient mesh that fills the entire screen.
+ * It is used as the root container for all screens in the app — every screen is
+ * composited on top of this background.
+ *
+ * The animation is made of three large overlapping circles whose positions oscillate
+ * over time using sine/cosine functions, creating a flowing "aurora" or "mesh gradient" effect.
+ * A Gaussian blur (API 31+) is applied to smooth the circle edges, producing soft colour blending.
+ *
+ * @param modifier   Optional modifier forwarded to the root [Box].
+ * @param onPulse    When `true`, the animation temporarily speeds up to 4× (e.g. after a QR scan).
+ *                   Automatically reverts to normal speed after the caller sets it back to `false`.
+ * @param isPaused   When `true`, animation is frozen at its current frame (saves battery when
+ *                   the user is not on the landing screen or when the app is backgrounded).
+ * @param content    The composable content to render on top of the background.
+ */
 @Composable
 fun MeshBackground(
     modifier: Modifier = Modifier,
-    onPulse: Boolean = false, // Trigger to speed up animation momentarily
-    isPaused: Boolean = false, // New: Ability to pause animation
+    onPulse: Boolean = false,
+    isPaused: Boolean = false,
     content: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -33,16 +49,17 @@ fun MeshBackground(
     val screenWidth = with(density) { configuration.screenWidthDp.dp.toPx() }
     val screenHeight = with(density) { configuration.screenHeightDp.dp.toPx() }
 
-    // Colors provided by user
-    val color1 = Color(0xFF91ACFD)
-    val color2 = Color(0xFF607DFE)
-    val color3 = Color(0xFFDAFFFD).copy(alpha = 0.61f)
-    val baseColor = Color(0xFFB1C2F6) // Fallback/Base background
+    // The three animated gradient colours
+    val color1 = Color(0xFF91ACFD)   // soft periwinkle blue
+    val color2 = Color(0xFF607DFE)   // deeper indigo
+    val color3 = Color(0xFFDAFFFD).copy(alpha = 0.61f)  // pale aqua with partial transparency
+    val baseColor = Color(0xFFB1C2F6) // solid fill behind the blurred circles
 
-    // Animation States
+    // `time` increments each frame, driving the oscillation of all three circles
     var time by remember { mutableFloatStateOf(0f) }
 
-    // Dynamic Speed Control
+    // Smoothly interpolate the animation speed based on the current state:
+    //   isPaused → 0 (frozen), onPulse → 4× (fast), normal → 1×
     val targetSpeed = when {
         isPaused -> 0f
         onPulse -> 4f
@@ -55,7 +72,8 @@ fun MeshBackground(
         label = "speed"
     )
 
-    // --- Animation Loop ---
+    // Frame loop: increments `time` every frame proportional to the current speed.
+    // Skips the increment when speed is effectively zero to avoid unnecessary recompositions.
     LaunchedEffect(Unit) {
         val startTime = withFrameNanos { it }
         while (true) {
@@ -70,28 +88,28 @@ fun MeshBackground(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(baseColor)
+            .background(baseColor) // solid base colour visible before / behind the blur
     ) {
-        // --- Canvas Drawing ---
+
         Canvas(
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                        // High performance blur for Android 12+
-                        // Using a constant blur effect is cheaper than recreating
-                         renderEffect = RenderEffect
+                        // API 31+: blur the entire canvas layer so circle edges blend into each other
+                        renderEffect = RenderEffect
                                 .createBlurEffect(
-                                    80f, 80f, 
+                                    80f, 80f,
                                     Shader.TileMode.MIRROR
                                 )
                                 .asComposeRenderEffect()
                     } else {
-                        alpha = 0.9f // Fallback for older devices
+                        // Older devices: reduce opacity slightly instead of blurring
+                        alpha = 0.9f
                     }
                 }
         ) {
-            // Blob 1
+            // Circle 1: oscillates horizontally and vertically using cos/sin on `time`
             drawCircle(
                 color = color1,
                 radius = screenWidth * 1.0f,
@@ -101,7 +119,8 @@ fun MeshBackground(
                 )
             )
 
-            // Blob 2
+            // Circle 2: moves in the opposite horizontal phase (negative multiplier)
+            // for a counter-rotating feel
             drawCircle(
                 color = color2,
                 radius = screenWidth * 1.1f,
@@ -111,7 +130,7 @@ fun MeshBackground(
                 )
             )
 
-            // Blob 3 (The light one)
+            // Circle 3: smaller, faster cycle (1.2× multiplier) – adds a subtle accent highlight
             drawCircle(
                 color = color3,
                 radius = screenWidth * 0.5f,
@@ -122,7 +141,7 @@ fun MeshBackground(
             )
         }
 
-        // Content Overlay
+        // Render the actual screen content on top of the background canvas
         content()
     }
 }

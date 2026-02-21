@@ -37,8 +37,17 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.min
 
-// --- Custom Shadow Utility ---
-// Draws a high-performance blurred drop shadow using Android framework Paint
+
+/**
+ * A custom [Modifier] that draws a soft drop-shadow around the composable
+ * using a Canvas + Paint approach (works on all API levels, unlike [shadow]).
+ *
+ * @param offsetX      Horizontal shadow offset.
+ * @param offsetY      Vertical shadow offset (positive = downward).
+ * @param blurRadius   How much to blur the shadow edges.
+ * @param color        Shadow colour including desired alpha.
+ * @param cornerRadius Corner radius of the rounded rect shadow shape.
+ */
 fun Modifier.customDropShadow(
     offsetX: Dp = 0.dp,
     offsetY: Dp = 4.dp,
@@ -71,6 +80,21 @@ fun Modifier.customDropShadow(
     }
 }
 
+/**
+ * QRScanScreen is the pairing screen where the user scans the QR code displayed
+ * on their Mac's ClipSync app.
+ *
+ * Layout (top → bottom):
+ * 1. A gradient "Pair With your Mac" header card (slides in from top).
+ * 2. A square QR-scanner card that hosts [CameraQRScanner] when the camera is active (springs up from bottom).
+ * 3. A "Scan QR" pill button at the very bottom that activates the camera (scales in with a bounce).
+ * 4. A Lottie loading overlay shown while the scanned data is being processed.
+ *
+ * @param initialCameraActive If `true`, the camera starts active immediately (used when navigated
+ *                            from the Re-pair flow with `startCamera=true`).
+ * @param onQRScanned         Called with the raw QR string once a code is successfully scanned.
+ *                            The caller is responsible for parsing the data and navigating.
+ */
 @Composable
 fun QRScanScreen(
     initialCameraActive: Boolean = false,
@@ -79,8 +103,8 @@ fun QRScanScreen(
     val configuration = LocalConfiguration.current
     val screenWidthDp = configuration.screenWidthDp.dp
     val screenHeightDp = configuration.screenHeightDp.dp
-    
-    // Reference design: 360x800
+
+    // Scale factors relative to the 360×800 design reference for this screen
     val widthScale = screenWidthDp.value / 360f
     val heightScale = screenHeightDp.value / 800f
     val scale = min(widthScale, heightScale)
@@ -96,22 +120,24 @@ fun QRScanScreen(
         Font(R.font.roboto_black, FontWeight.Black)
     )
 
-    // --- State & Animations ---
+    // Camera is dormant until the user taps "Scan QR"
     var isCameraActive by remember { mutableStateOf(initialCameraActive) }
+    // Shown while the scanned QR data is being processed (Firestore pairing call)
     var isLoading by remember { mutableStateOf(false) }
+    // Stores the raw string extracted from the scanned QR code
     var scannedData by remember { mutableStateOf("") }
 
-    // Preload Lottie Animation
+    // Lottie animation shown in the loading overlay
     val composition by rememberLottieComposition(LottieCompositionSpec.Asset("Loading.lottie"))
     val lottieAnimatable = rememberLottieAnimatable()
 
-    // Staggered Entry States
+    // Staggered entrance animation flags
     var showTopCard by remember { mutableStateOf(false) }
     var showContent by remember { mutableStateOf(false) }
     var showQR by remember { mutableStateOf(false) }
     var showButton by remember { mutableStateOf(false) }
 
-    // Trigger Entry Animation
+    // Trigger the staggered entrance on first composition
     LaunchedEffect(Unit) {
         delay(100)
         showTopCard = true
@@ -123,43 +149,45 @@ fun QRScanScreen(
         showButton = true
     }
 
-    // Handle animation and transition
+    // Once isLoading becomes true, play the Lottie animation and then fire onQRScanned.
+    // The delay lets the animation play for at least one cycle before navigation.
     LaunchedEffect(isLoading) {
         if (isLoading) {
-            // Play animation once from start to finish
             lottieAnimatable.animate(
                 composition = composition,
                 initialProgress = 0f
             )
-            // Animation finished, trigger callback
             onQRScanned(scannedData)
         }
     }
 
-    // MeshBackground removed (hoisted to MainActivity)
     Box(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Responsive dimensions
+        // ── Dimension pre-calculations ────────────────────────────────────────
         val topCardOffsetY = (90 * heightScale).dp
         val topCardHeight = (240 * heightScale).dp
         val cornerRadius = (32 * scale).coerceIn(20f, 32f).dp
-        
+
+        // Text sizes for the header card
         val titleFontSize = (58 * scale).coerceIn(36f, 58f).sp
         val titleLineHeight = (54 * scale).coerceIn(34f, 54f).sp
         val subtitleFontSize = (24 * scale).coerceIn(16f, 24f).sp
         val subtitleLineHeight = (28 * scale).coerceIn(18f, 28f).sp
         val contentPadding = (40 * scale).dp
-        
+
+        // QR scanner card dimensions
         val qrCardSize = (min(screenWidthDp.value * 0.9f, 352f)).dp
         val qrCardOffsetY = (370 * heightScale).dp
-        
+
+        // "Scan QR" button dimensions
         val buttonWidth = (161 * scale).coerceIn(130f, 161f).dp
         val buttonHeight = (59 * scale).coerceIn(48f, 59f).dp
         val buttonFontSize = (26 * scale).coerceIn(18f, 26f).sp
         val buttonBottomOffset = (-40).dp
 
-        // Top gradient card
+        // ── HEADER CARD (slides in from top) ─────────────────────────────────
+        // Displays the "Pair With your Mac" title and the instruction subtitle.
         androidx.compose.animation.AnimatedVisibility(
                 visible = showTopCard,
                 enter = androidx.compose.animation.fadeIn(tween(600)) +
@@ -183,7 +211,7 @@ fun QRScanScreen(
                             )
                         )
                 ) {
-                    // --- Camera View Container ---
+
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showContent,
                         enter = androidx.compose.animation.fadeIn(tween(800))
@@ -193,6 +221,7 @@ fun QRScanScreen(
                                 .fillMaxSize()
                                 .padding(horizontal = contentPadding, vertical = (10 * heightScale).dp)
                         ) {
+                            // Main heading: two-line bold title
                             Text(
                                 text = "Pair With\nyour Mac",
                                 fontFamily = robotoFontFamily,
@@ -205,6 +234,7 @@ fun QRScanScreen(
 
                             Spacer(modifier = Modifier.weight(1f))
 
+                            // Instruction text with a blue→purple gradient colour
                             Text(
                                 text = "Open ClipSync on your Mac and scan the QR code to connect instantly.",
                                 fontFamily = robotoFontFamily,
@@ -229,122 +259,127 @@ fun QRScanScreen(
                 }
             }
 
-            // QR Scanner Card
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showQR,
-                enter = androidx.compose.animation.fadeIn(tween(600)) +
-                        androidx.compose.animation.slideInVertically(initialOffsetY = { 200 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)),
+        // ── QR SCANNER CARD (springs up from bottom) ──────────────────────────
+        // When isCameraActive is false, this is an empty frosted card acting as a placeholder.
+        // When isCameraActive is true, [CameraQRScanner] fills the card and starts the camera.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showQR,
+            enter = androidx.compose.animation.fadeIn(tween(600)) +
+                    androidx.compose.animation.slideInVertically(initialOffsetY = { 200 }, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)),
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .offset(y = qrCardOffsetY)
+        ) {
+            Box(
                 modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .offset(y = qrCardOffsetY)
+                    .size(qrCardSize)
+                    .customDropShadow(
+                        offsetX = 0.dp,
+                        offsetY = 4.dp,
+                        blurRadius = 50.dp,
+                        color = Color.Black.copy(alpha = 0.25f),
+                        cornerRadius = cornerRadius
+                    )
+                    .clip(RoundedCornerShape(cornerRadius))
+                    .background(
+                        color = Color.White.copy(alpha = 0.35f),
+                        shape = RoundedCornerShape(cornerRadius)
+                    )
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(qrCardSize)
-                        .customDropShadow(
-                            offsetX = 0.dp,
-                            offsetY = 4.dp,
-                            blurRadius = 50.dp,
-                            color = Color.Black.copy(alpha = 0.25f),
-                            cornerRadius = cornerRadius
-                        )
-                        .clip(RoundedCornerShape(cornerRadius))
-                        .background(
-                            color = Color.White.copy(alpha = 0.35f),
-                            shape = RoundedCornerShape(cornerRadius)
-                        )
-                ) {
-                    // Camera preview shows ONLY when button is clicked
-                    if (isCameraActive) {
-                        CameraQRScanner(
-                            onQRCodeScanned = { qrData ->
-                                // Stop camera and start loading
-                                isCameraActive = false
-                                scannedData = qrData
-                                isLoading = true
-                            },
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(cornerRadius))
-                        )
-                    }
-                }
-            }
 
-            // "Scan QR" Button - FIXED CLICKABLE
-            androidx.compose.animation.AnimatedVisibility(
-                visible = showButton,
-                enter = androidx.compose.animation.fadeIn(tween(400)) +
-                        androidx.compose.animation.scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .offset(y = buttonBottomOffset)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .width(buttonWidth)
-                        .height(buttonHeight)
-                        .background(
-                            color = Color.White.copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(cornerRadius)
-                        )
-                        .border(
-                            width = 1.dp,
-                            color = Color.White,
-                            shape = RoundedCornerShape(cornerRadius)
-                        )
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() }
-                        ) {
-                            // Activate camera when button is clicked
-                            isCameraActive = true
+                if (isCameraActive) {
+                    // Camera is active: render the live QR scanner inside the card
+                    CameraQRScanner(
+                        onQRCodeScanned = { qrData ->
+                            // QR detected: stop the camera, store the data, and show loading
+                            isCameraActive = false
+                            scannedData = qrData
+                            isLoading = true
                         },
-                    contentAlignment = Alignment.Center
-                ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.Center
-                    ) {
-                        Icon(
-                            painter = painterResource(id = R.drawable.qr_scan),
-                            contentDescription = "QR Scanner",
-                            modifier = Modifier.size((30 * scale).coerceIn(22f, 30f).dp),
-                            tint = Color.Black
-                        )
-                        Spacer(modifier = Modifier.width((8 * scale).dp))
-                        Text(
-                            text = "Scan QR",
-                            fontFamily = robotoFontFamily,
-                            fontWeight = FontWeight.Medium,
-                            fontSize = buttonFontSize,
-                            letterSpacing = (-0.03).em,
-                            color = Color.Black
-                        )
-                    }
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clip(RoundedCornerShape(cornerRadius))
+                    )
                 }
+                // If not active, the card is empty – acts as a visual placeholder
             }
+        }
 
-            // Loading Animation Overlay
-            if (isLoading) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .clickable(
-                            indication = null,
-                            interactionSource = remember { MutableInteractionSource() },
-                            enabled = false
-                        ) {}, // Block clicks
-                    contentAlignment = Alignment.Center
+        // ── SCAN QR BUTTON (scales in with bounce) ────────────────────────────
+        // Positioned near the bottom of the screen. Tapping it activates the camera.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showButton,
+            enter = androidx.compose.animation.fadeIn(tween(400)) +
+                    androidx.compose.animation.scaleIn(initialScale = 0.8f, animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .offset(y = buttonBottomOffset)
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(buttonWidth)
+                    .height(buttonHeight)
+                    .background(
+                        color = Color.White.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(cornerRadius)
+                    )
+                    .border(
+                        width = 1.dp,
+                        color = Color.White,
+                        shape = RoundedCornerShape(cornerRadius)
+                    )
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() }
+                    ) {
+                        // Activate the camera to start scanning
+                        isCameraActive = true
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    LottieAnimation(
-                        composition = composition,
-                        progress = { lottieAnimatable.progress },
-                        modifier = Modifier.size(200.dp)
+                    Icon(
+                        painter = painterResource(id = R.drawable.qr_scan),
+                        contentDescription = "QR Scanner",
+                        modifier = Modifier.size((30 * scale).coerceIn(22f, 30f).dp),
+                        tint = Color.Black
+                    )
+                    Spacer(modifier = Modifier.width((8 * scale).dp))
+                    Text(
+                        text = "Scan QR",
+                        fontFamily = robotoFontFamily,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = buttonFontSize,
+                        letterSpacing = (-0.03).em,
+                        color = Color.Black
                     )
                 }
             }
         }
+
+        // ── LOADING OVERLAY ───────────────────────────────────────────────────
+        // Covers the entire screen with a Lottie animation while pairing is in progress.
+        // Input is blocked via a non-interactable transparent clickable.
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { MutableInteractionSource() },
+                        enabled = false   // block all taps while loading
+                    ) {},
+                contentAlignment = Alignment.Center
+            ) {
+                LottieAnimation(
+                    composition = composition,
+                    progress = { lottieAnimatable.progress },
+                    modifier = Modifier.size(200.dp)
+                )
+            }
+        }
     }
-
-
+}

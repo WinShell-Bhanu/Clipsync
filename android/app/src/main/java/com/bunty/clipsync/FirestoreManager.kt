@@ -6,12 +6,30 @@ import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
 import org.json.JSONObject
 
+/**
+ * FirestoreManager is the single entry-point for all Firestore database operations.
+ *
+ * It handles:
+ * - Selecting the correct Firebase project (US or IN) based on the stored region.
+ * - Parsing the QR code JSON emitted by the Mac app.
+ * - Creating and deleting pairing documents in the `pairings` collection.
+ * - Sending and listening to encrypted clipboard items in the `clipboardItems` collection.
+ * - Sending encrypted OTP notifications to the `notifications` collection.
+ * - AES-256-GCM encryption and decryption of all clipboard content.
+ */
 object FirestoreManager {
-    // Dynamic DB Access based on selected region
+
+    /**
+     * Returns the [FirebaseFirestore] instance for the target region stored in [DeviceManager].
+     *
+     * - `"US"` → uses the named secondary Firebase app `"ClipSyncUS"` (initialised in [ClipSyncApp]).
+     * - `"IN"` (or any other) → uses the default Firebase app from `google-services.json`.
+     *
+     * Falls back to the default instance if the US app hasn't been initialised yet.
+     */
     internal fun getDb(context: Context): FirebaseFirestore {
         val targetRegion = DeviceManager.getTargetRegion(context)
         return if (targetRegion == RegionConfig.REGION_US) {
-            // Use the Named App for US
             try {
                 FirebaseFirestore.getInstance(com.google.firebase.FirebaseApp.getInstance("ClipSyncUS"))
             } catch (e: Exception) {
@@ -19,152 +37,189 @@ object FirestoreManager {
                 FirebaseFirestore.getInstance()
             }
         } else {
-            // Use Default App for India
+            // Default instance targets the India Firestore region
             FirebaseFirestore.getInstance()
         }
     }
 
-    // Dynamic Secret Retrieval
-    private fun getSharedSecret(context: Context): String {
-        return DeviceManager.getEncryptionKey(context)
-    }
+    /**
+     * Returns the AES-256 encryption key (hex string) for the current pairing session.
+     * Delegated to [DeviceManager] which falls back to [Secrets.FALLBACK_ENCRYPTION_KEY].
+     */
+    private fun getSharedSecret(context: Context): String =
+        DeviceManager.getEncryptionKey(context)
 
-    // --- QR Parsing Strategy ---
-    // Supports:
-    // 1. JSON (New V1 Format) - Contains {server, secret, macId}
-    // 2. Legacy - Fallback for older versions
+    /**
+     * Parses the raw JSON string embedded in the Mac's QR code into a typed map.
+     *
+     * Expected JSON fields:
+     * - `macId` / `macDeviceId` – unique identifier of the Mac.
+     * - `deviceName` / `macDeviceName` – display name of the Mac.
+     * - `server` / `serverRegion` – Firestore region to use (`"IN"` or `"US"`).
+     * - `secret` – the 64-char hex AES-256 encryption key.
+     *
+     * @param qrData The raw string decoded from the QR code image.
+     * @return A map of the parsed fields, or `null` if the JSON is invalid or `macId` is missing.
+     */
     fun parseQRData(qrData: String): Map<String, Any>? {
-        try {
+        return try {
             if (qrData.trim().startsWith("{")) {
                 val jsonObject = JSONObject(qrData)
                 val macId = jsonObject.optString("macId")
                 val deviceName = jsonObject.optString("deviceName").ifEmpty {
                     jsonObject.optString("macDeviceName", "Mac")
                 }
-                val secret = jsonObject.optString("secret") // Extract new key
+                val secret = jsonObject.optString("secret")
 
                 if (macId.isNotEmpty()) {
-                    return mapOf(
-                        "macDeviceId" to macId,
+                    mapOf(
+                        "macDeviceId"  to macId,
                         "macDeviceName" to deviceName,
                         "serverRegion" to jsonObject.optString("server").ifEmpty {
                             jsonObject.optString("serverRegion", "IN")
                         },
                         "secret" to secret
                     )
-                }
-            }
-            return null
+                } else null
+            } else null
         } catch (e: Exception) {
-            return null
+            null
         }
     }
 
-    // --- Encryption Helpers (AES-GCM) ---
-    // Uses the Dynamic Key (swapped via QR) to secure clipboard data.
+    /**
+     * Decrypts a Base64-encoded AES-256-GCM ciphertext back to a plain-text string.
+     *
+     * Format of [encryptedBase64] after Base64-decoding:
+     * `[12-byte IV][ciphertext + 16-byte GCM auth tag]`
+     *
+     * @param context       Used to retrieve the shared AES key from [DeviceManager].
+     * @param encryptedBase64 Base64-encoded (NO_WRAP) encrypted payload.
+     * @return The decrypted plain-text string.
+     * @throws Exception if decryption fails (bad key, corrupted ciphertext, etc.).
+     */
     private fun decryptData(context: Context, encryptedBase64: String): String {
-        try {
-            val encryptedBytes = android.util.Base64.decode(encryptedBase64, android.util.Base64.NO_WRAP)
-            if (encryptedBytes.size < 28) return ""
+        val encryptedBytes = android.util.Base64.decode(encryptedBase64, android.util.Base64.NO_WRAP)
+        if (encryptedBytes.size < 28) return ""  // too short to be valid (12 IV + 16 tag minimum)
 
-            val keyBytes = hexStringToByteArray(getSharedSecret(context)) // Use Dynamic Key
-            val keySpec = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
+        val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(getSharedSecret(context)), "AES")
 
-            val iv = encryptedBytes.copyOfRange(0, 12)
-            val ciphertext = encryptedBytes.copyOfRange(12, encryptedBytes.size)
+        // First 12 bytes are the random IV; the rest is ciphertext + GCM auth tag
+        val iv         = encryptedBytes.copyOfRange(0, 12)
+        val ciphertext = encryptedBytes.copyOfRange(12, encryptedBytes.size)
 
-            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-            val gcmSpec = javax.crypto.spec.GCMParameterSpec(128, iv)
+        val cipher  = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, javax.crypto.spec.GCMParameterSpec(128, iv))
 
-            cipher.init(javax.crypto.Cipher.DECRYPT_MODE, keySpec, gcmSpec)
-            val plaintextBytes = cipher.doFinal(ciphertext)
-
-            return String(plaintextBytes, Charsets.UTF_8)
-        } catch (e: Exception) {
-            throw e
-        }
+        return String(cipher.doFinal(ciphertext), Charsets.UTF_8)
     }
 
-    // Encrypt AES-GCM -> Base64 String
+    /**
+     * Encrypts a plain-text string using AES-256-GCM and returns a Base64-encoded result.
+     *
+     * A fresh random 12-byte IV is generated for every call, so the same plaintext
+     * produces a different ciphertext each time (semantic security).
+     *
+     * Output format (after Base64 decoding): `[12-byte IV][ciphertext + 16-byte GCM auth tag]`
+     *
+     * Falls back to returning [plainText] unencrypted on error (logged as an error).
+     *
+     * @param context   Used to retrieve the shared AES key.
+     * @param plainText The text to encrypt.
+     * @return Base64-encoded (NO_WRAP) encrypted payload.
+     */
     private fun encryptData(context: Context, plainText: String): String {
-        try {
-            val keyBytes = hexStringToByteArray(getSharedSecret(context)) // Use Dynamic Key
-            val keySpec = javax.crypto.spec.SecretKeySpec(keyBytes, "AES")
+        return try {
+            val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(getSharedSecret(context)), "AES")
+            val cipher  = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
 
-            val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
-            val iv = ByteArray(12)
-            java.security.SecureRandom().nextBytes(iv)
-            
-            val gcmSpec = javax.crypto.spec.GCMParameterSpec(128, iv)
-            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, keySpec, gcmSpec)
+            // Generate a fresh random IV for every encryption call
+            val iv = ByteArray(12).also { java.security.SecureRandom().nextBytes(it) }
+            cipher.init(javax.crypto.Cipher.ENCRYPT_MODE, keySpec, javax.crypto.spec.GCMParameterSpec(128, iv))
 
             val ciphertext = cipher.doFinal(plainText.toByteArray(Charsets.UTF_8))
 
+            // Concatenate IV + ciphertext and Base64-encode the result
             val combined = ByteArray(iv.size + ciphertext.size)
             System.arraycopy(iv, 0, combined, 0, iv.size)
             System.arraycopy(ciphertext, 0, combined, iv.size, ciphertext.size)
 
-            return android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
+            android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Encryption failed", e)
-            return plainText
+            plainText  // last-resort fallback: send unencrypted
         }
     }
 
+    /**
+     * Converts a hex string (e.g. `"4A2F..."`) to a raw [ByteArray].
+     * Each pair of hex characters maps to one byte.
+     */
     private fun hexStringToByteArray(s: String): ByteArray {
-        val len = s.length
-        val data = ByteArray(len / 2)
+        val data = ByteArray(s.length / 2)
         var i = 0
-        while (i < len) {
+        while (i < s.length) {
             data[i / 2] = ((Character.digit(s[i], 16) shl 4) + Character.digit(s[i + 1], 16)).toByte()
             i += 2
         }
         return data
     }
 
-    // --- Firestore Operations ---
-
-    // Create a new pairing document
+    /**
+     * Creates a new pairing document in the Firestore `pairings` collection.
+     *
+     * If a previous pairing document exists (stored in [DeviceManager.getPairingId]),
+     * it is deleted first to avoid orphaned records in the cloud.
+     *
+     * On success, [DeviceManager.savePairing] is called to persist the pairing locally,
+     * and [onSuccess] is invoked with the new pairing document ID.
+     *
+     * @param context   Application context.
+     * @param qrData    The parsed QR data map from [parseQRData].
+     * @param onSuccess Called with the new Firestore document ID on success.
+     * @param onFailure Called with the exception on failure.
+     */
     fun createPairing(
         context: Context,
         qrData: Map<String, Any>,
         onSuccess: (String) -> Unit,
         onFailure: (Exception) -> Unit
     ) {
-        val androidDeviceId = DeviceManager.getDeviceId(context)
+        val androidDeviceId   = DeviceManager.getDeviceId(context)
         val androidDeviceName = DeviceManager.getAndroidDeviceName()
-        val macDeviceId = qrData["macDeviceId"] as? String ?: ""
-        val macDeviceName = qrData["macDeviceName"] as? String ?: "Mac"
-        val secret = qrData["secret"] as? String
-        
+        val macDeviceId       = qrData["macDeviceId"] as? String ?: ""
+        val macDeviceName     = qrData["macDeviceName"] as? String ?: "Mac"
+        val secret            = qrData["secret"] as? String
+
+        // Persist the encryption key received from the QR code before writing to Firestore
         if (!secret.isNullOrEmpty()) {
             DeviceManager.saveEncryptionKey(context, secret)
         }
 
         val pairingData = hashMapOf<String, Any>(
-            "androidDeviceId" to androidDeviceId,
+            "androidDeviceId"   to androidDeviceId,
             "androidDeviceName" to androidDeviceName,
-            "macDeviceId" to macDeviceId,
-            "macId" to macDeviceId,
-            "macDeviceName" to macDeviceName,
-            "createdAt" to System.currentTimeMillis(),
-            "timestamp" to com.google.firebase.Timestamp.now(),
-            "status" to "active"
+            "macDeviceId"       to macDeviceId,
+            "macId"             to macDeviceId,  // legacy field kept for Mac-side compatibility
+            "macDeviceName"     to macDeviceName,
+            "createdAt"         to System.currentTimeMillis(),
+            "timestamp"         to com.google.firebase.Timestamp.now(),
+            "status"            to "active"
         )
 
-
-        // Helper to actually create the NEW pairing
+        /** Writes [pairingData] to Firestore and handles the result callbacks. */
         fun createNewPairing() {
             getDb(context).collection("pairings")
                 .add(pairingData)
                 .addOnSuccessListener { documentReference ->
                     val pairingId = documentReference.id
+                    // Write the auto-generated document ID back into the document itself
                     documentReference.update("pairingId", pairingId)
 
                     DeviceManager.savePairing(
-                        context = context,
-                        pairingId = pairingId,
-                        macDeviceId = macDeviceId,
+                        context       = context,
+                        pairingId     = pairingId,
+                        macDeviceId   = macDeviceId,
                         macDeviceName = macDeviceName
                     )
 
@@ -176,29 +231,35 @@ object FirestoreManager {
                 }
         }
 
+        // Delete the old pairing document before creating a new one
         val oldPairingId = DeviceManager.getPairingId(context)
         if (oldPairingId != null) {
             getDb(context).collection("pairings").document(oldPairingId).delete()
-                .addOnSuccessListener {
-                    createNewPairing()
-                }
-                .addOnFailureListener { e ->
-                    createNewPairing()
-                }
+                .addOnSuccessListener  { createNewPairing() }
+                .addOnFailureListener  { createNewPairing() }  // proceed even if delete fails
         } else {
-            // No existing pairing, just create new one
             createNewPairing()
         }
     }
 
-    // --- Clipboard Syncing ---
-
-    // Listen for incoming clipboard changes (Decryption happens here)
+    /**
+     * Attaches a real-time Firestore listener to the `clipboardItems` collection,
+     * filtered to the current pairing and ordered newest-first.
+     *
+     * When a new item arrives from the Mac:
+     * - Items sent by this Android device are ignored (source device ID check).
+     * - The content is decrypted with [decryptData] before being passed to [onClipboardUpdate].
+     *
+     * @param context           Application context.
+     * @param onClipboardUpdate Called on the main thread with the decrypted clipboard text.
+     * @return A [ListenerRegistration] that must be removed when the observer is destroyed,
+     *         or `null` if no pairing ID is available.
+     */
     fun listenToClipboard(
         context: Context,
         onClipboardUpdate: (String) -> Unit
     ): ListenerRegistration? {
-        val pairingId = DeviceManager.getPairingId(context) ?: return null
+        val pairingId       = DeviceManager.getPairingId(context) ?: return null
         val currentDeviceId = DeviceManager.getDeviceId(context)
 
         return getDb(context).collection("clipboardItems")
@@ -213,25 +274,34 @@ object FirestoreManager {
 
                 snapshots?.documents?.firstOrNull()?.let { document ->
                     val encryptedContent = document.getString("content")
-                    val sourceDeviceId = document.getString("sourceDeviceId")
+                    val sourceDeviceId   = document.getString("sourceDeviceId")
 
-                    // Only update if it came from a different device (Mac)
+                    // Only process items that came from the Mac, not from this device
                     if (encryptedContent != null && sourceDeviceId != currentDeviceId) {
-                         // DECRYPT HERE
-                         try {
-                             val decryptedContent = decryptData(context, encryptedContent)
-                             if (decryptedContent.isNotEmpty()) {
-                                 onClipboardUpdate(decryptedContent)
-                             }
-                         } catch (e: Exception) {
-                             Log.e("FirestoreManager", "Failed to decrypt incoming clipboard", e)
-                         }
+                        try {
+                            val decryptedContent = decryptData(context, encryptedContent)
+                            if (decryptedContent.isNotEmpty()) {
+                                onClipboardUpdate(decryptedContent)
+                            }
+                        } catch (e: Exception) {
+                            Log.e("FirestoreManager", "Failed to decrypt incoming clipboard", e)
+                        }
                     }
                 }
             }
     }
 
-    // Send clipboard to Firestore (ENCRYPTING)
+    /**
+     * Encrypts [text] and writes it to the `clipboardItems` Firestore collection.
+     *
+     * The document includes the pairing ID, source device ID, and a server timestamp
+     * so the Mac can query only items newer than its last-seen timestamp.
+     *
+     * @param context   Application context.
+     * @param text      The plain-text clipboard content to send.
+     * @param onSuccess Called when the document is written successfully.
+     * @param onFailure Called with the exception if the write fails.
+     */
     fun sendClipboard(
         context: Context,
         text: String,
@@ -243,31 +313,35 @@ object FirestoreManager {
             onFailure(Exception("No pairing ID found"))
             return
         }
-        
-        val deviceId = DeviceManager.getDeviceId(context)
 
-        // ENCRYPT HERE
         val encryptedContent = encryptData(context, text)
 
         val clipboardData = hashMapOf<String, Any>(
-            "content" to encryptedContent,
-            "pairingId" to pairingId,
-            "sourceDeviceId" to deviceId,
-            "timestamp" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-            "type" to "text"
+            "content"        to encryptedContent,
+            "pairingId"      to pairingId,
+            "sourceDeviceId" to DeviceManager.getDeviceId(context),
+            "timestamp"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+            "type"           to "text"
         )
 
         getDb(context).collection("clipboardItems")
             .add(clipboardData)
-            .addOnSuccessListener {
-                onSuccess()
-            }
+            .addOnSuccessListener { onSuccess() }
             .addOnFailureListener { exception ->
                 Log.e("FirestoreManager", "Failed to send clipboard", exception)
                 onFailure(exception)
             }
     }
 
+    /**
+     * Deletes the pairing document from Firestore, then clears the local pairing state
+     * via [DeviceManager.clearPairing].
+     *
+     * Called when the user taps "Reset Pairing" in [Homescreen].
+     *
+     * @param onSuccess Called after the Firestore document is deleted and local state is cleared.
+     * @param onFailure Called with the exception if the Firestore delete fails.
+     */
     fun clearPairing(
         context: Context,
         onSuccess: () -> Unit = {},
@@ -279,7 +353,7 @@ object FirestoreManager {
             .document(pairingId)
             .delete()
             .addOnSuccessListener {
-                DeviceManager.clearPairing(context)
+                DeviceManager.clearPairing(context)  // also clear local SharedPreferences
                 onSuccess()
             }
             .addOnFailureListener { exception ->
@@ -288,7 +362,14 @@ object FirestoreManager {
             }
     }
 
-    // Clear CLIPBOARD history for this pairing
+    /**
+     * Batch-deletes all `clipboardItems` documents for the current pairing.
+     *
+     * Used by the "Clear Cloud Clipboard" action button in [Homescreen].
+     *
+     * @param onSuccess Called after all documents are deleted.
+     * @param onFailure Called if the query or batch commit fails.
+     */
     fun clearClipboard(
         context: Context,
         onSuccess: () -> Unit = {},
@@ -300,6 +381,7 @@ object FirestoreManager {
             return
         }
 
+        // Fetch all clipboard items for this pairing, then delete them in a single batch
         getDb(context).collection("clipboardItems")
             .whereEqualTo("pairingId", pairingId)
             .get()
@@ -309,9 +391,7 @@ object FirestoreManager {
                     batch.delete(doc.reference)
                 }
                 batch.commit()
-                    .addOnSuccessListener {
-                        onSuccess()
-                    }
+                    .addOnSuccessListener { onSuccess() }
                     .addOnFailureListener { e ->
                         Log.e("FirestoreManager", "Failed to commit batch delete", e)
                         onFailure(e)

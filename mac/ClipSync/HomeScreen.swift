@@ -3,6 +3,10 @@ import AppKit
 import CryptoKit
 import Lottie
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates home screen behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct HomeScreen: View {
     @StateObject private var clipboardManager = ClipboardManager.shared
     @StateObject private var pairingManager = PairingManager.shared
@@ -10,7 +14,7 @@ struct HomeScreen: View {
 
     @AppStorage("syncToMac") private var syncToMac = true
     @AppStorage("syncFromMac") private var syncFromMac = true
-    
+
     @State private var encryptionTestResult: String? = nil
     @State private var isTestingEncryption = false
     @State private var showEncryptionSuccess = false
@@ -31,8 +35,8 @@ struct HomeScreen: View {
                 .ignoresSafeArea()
 
             VStack(alignment: .leading, spacing: 0) {
-                // --- Core Layout ---
-                // Title
+
+
                 Text("Settings")
                     .font(.system(size: 40, weight: .bold, design: .default))
                     .foregroundColor(.white)
@@ -43,12 +47,12 @@ struct HomeScreen: View {
                     .padding(.bottom, 20)
 
                 VStack(alignment: .leading, spacing: 16) {
-                        
-                        // Top Row - Device Card and Check Encryption Card
+
+
                         HStack(alignment: .top, spacing: 18) {
-                            // Left Column: Device Card + (Sync Settings | RePair)
+
                             VStack(alignment: .leading, spacing: 12) {
-                                // --- Device Card ---
+
                                 InnerGlassCard {
                                     HStack(spacing: 12) {
                                         Image("mobile")
@@ -56,57 +60,56 @@ struct HomeScreen: View {
                                             .aspectRatio(contentMode: .fit)
                                             .frame(width: 28, height: 28)
                                             .foregroundColor(Color(red: 0.125, green: 0.263, blue: 0.600))
-                                        
+
                                         Text(pairingManager.pairedDeviceName.isEmpty ? "No Device" : pairingManager.pairedDeviceName)
                                             .font(.system(size: 24, weight: .bold))
                                             .foregroundColor(Color(red: 0.125, green: 0.263, blue: 0.600))
                                             .lineLimit(1)
                                             .minimumScaleFactor(0.5)
-                                        
+
                                         Spacer()
-                                        
-                                        // Tick Animation
+
+
                                         TickLottieView()
                                             .frame(width: 40, height: 40)
-                                            .id(tickID) // Force recreation to replay animation
+                                            .id(tickID)
                                     }
                                     .padding(.horizontal, 18)
                                     .padding(.vertical, 16)
                                 }
                                 .frame(width: 298, height: 70)
                                 .offset(x: 7)
-                                
-                                
-                                // --- Sync Settings Row ---
+
+
                                 HStack(alignment: .top, spacing: 28) {
-                                    // Sync Toggles
+
                                     InnerGlassCard {
                                         VStack(alignment: .leading, spacing: 0) {
                                             Text("Sync Settings")
                                                 .font(.system(size: 11, weight: .semibold))
                                                 .foregroundColor(.black.opacity(0.6))
-                                                .padding(.top, 14) // Adjusted Padding
+                                                .padding(.top, 14)
                                                 .padding(.leading, 12)
                                                 .padding(.bottom, 12)
-                                            
-                                            // Sync to Mac Row
+
+
                                             HStack(spacing: 6) {
                                                 Image(systemName: "iphone")
                                                     .font(.system(size: 14))
                                                     .foregroundColor(.black)
                                                     .frame(width: 16)
-                                                
+
                                                 Image(systemName: "arrow.right")
                                                     .font(.system(size: 10, weight: .bold))
                                                     .foregroundColor(.black.opacity(0.6))
-                                                
+
                                                 Image(systemName: "laptopcomputer")
                                                     .font(.system(size: 14))
                                                     .foregroundColor(.black)
                                                     .frame(width: 20)
-                                                
+
                                                 Spacer(minLength: 0)
-                                                
+
                                                 Toggle("", isOn: $syncToMac)
                                                     .labelsHidden()
                                                     .toggleStyle(.switch)
@@ -114,40 +117,40 @@ struct HomeScreen: View {
                                             }
                                             .padding(.horizontal, 10)
                                             .padding(.bottom, 8)
-                                            
-                                            // Sync from Mac Row
+
+
                                             HStack(spacing: 6) {
                                                 Image(systemName: "laptopcomputer")
                                                     .font(.system(size: 14))
                                                     .foregroundColor(.black)
                                                     .frame(width: 20)
-                                                
+
                                                 Image(systemName: "arrow.right")
                                                     .font(.system(size: 10, weight: .bold))
                                                     .foregroundColor(.black.opacity(0.6))
-                                                
+
                                                 Image(systemName: "iphone")
                                                     .font(.system(size: 14))
                                                     .foregroundColor(.black)
                                                     .frame(width: 16)
-                                                
+
                                                 Spacer(minLength: 0)
-                                                
+
                                                 Toggle("", isOn: $syncFromMac)
                                                     .labelsHidden()
                                                     .toggleStyle(.switch)
                                                     .scaleEffect(0.6)
                                             }
                                             .padding(.horizontal, 10)
-                                            
+
                                             Spacer()
                                         }
                                     }
                                     .frame(width: 125, height: 130)
-                                    
-                                    // RePair Button Card
+
+
                                     ZStack {
-                                        // Normal RePair button
+
                                         RePairButton {
                                             withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
                                                 showRepairQR = true
@@ -156,8 +159,8 @@ struct HomeScreen: View {
                                             pairingManager.listenForPairing(macDeviceId: macDeviceId)
                                         }
                                         .opacity(showRepairQR ? 0 : 1)
-                                        
-                                        // QR Code overlay
+
+
                                         if showRepairQR {
                                             InnerGlassCard {
                                                 VStack(spacing: 2) {
@@ -172,11 +175,11 @@ struct HomeScreen: View {
                                                         ProgressView()
                                                             .frame(width: 90, height: 90)
                                                     }
-                                                    
+
                                                     Text("Scan to RePair")
                                                         .font(.system(size: 10, weight: .medium))
                                                         .foregroundColor(.black.opacity(0.6))
-                                                    
+
                                                     Button {
                                                         withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                                                             showRepairQR = false
@@ -204,8 +207,8 @@ struct HomeScreen: View {
                                 }
                                 .padding(.leading, 15)
                             }
-                            
-                            // --- Encryption Test Card ---
+
+
                             CheckEncryptionCard(
                                 encryptionTestResult: encryptionTestResult,
                                 isTestingEncryption: isTestingEncryption,
@@ -215,8 +218,8 @@ struct HomeScreen: View {
                             .frame(width: 200, height: 212)
                         }
                         .padding(.horizontal, 30)
-                        
-                        // --- Clipboard History (Bottom) ---
+
+
                         InnerGlassCard {
                             VStack(alignment: .leading, spacing: 0) {
                                 Text("Clipboard History")
@@ -225,11 +228,11 @@ struct HomeScreen: View {
                                     .padding(.top, 14)
                                     .padding(.leading, 16)
                                     .padding(.bottom, 8)
-                                    
+
                                 Divider()
                                     .background(Color.black.opacity(0.1))
                                     .padding(.horizontal, 16)
-                                
+
                                 ScrollView(showsIndicators: false) {
                                     VStack(alignment: .leading, spacing: 0) {
                                         if clipboardManager.history.isEmpty {
@@ -252,7 +255,7 @@ struct HomeScreen: View {
                                                 }
                                                 .padding(.horizontal, 16)
                                                 .padding(.vertical, 12)
-                                                
+
                                                 if item.id != clipboardManager.history.prefix(20).last?.id {
                                                     Divider()
                                                         .background(Color.white.opacity(0.2))
@@ -286,7 +289,7 @@ struct HomeScreen: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.leading, 30)
                         .padding(.top, 8)
-                        
+
                         Spacer()
                             .frame(height: 10)
                 }
@@ -300,8 +303,8 @@ struct HomeScreen: View {
         .frame(width: 590, height: 590)
         .ignoresSafeArea()
         .onAppear {
-            tickID = UUID() // Replay tick animation
-            updateChecker.checkForUpdates() // Check for updates
+            tickID = UUID()
+            updateChecker.checkForUpdates()
             if !clipboardManager.isSyncPaused {
                 clipboardManager.startMonitoring()
                 clipboardManager.listenForAndroidClipboard()
@@ -325,24 +328,29 @@ struct HomeScreen: View {
         }
         .enableInjection()
     }
-    
+
+
+    // Purpose: Implements the test encryption operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func testEncryption() {
         isTestingEncryption = true
         encryptionTestResult = nil
         showEncryptionSuccess = false
-        
+
         DispatchQueue.global(qos: .userInitiated).async {
             let testString = "ClipSync Encryption Test - \(UUID().uuidString)"
             let encrypted = encryptTestString(testString)
             let decrypted = decryptTestString(encrypted)
-            
+
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 isTestingEncryption = false
-                
+
                 if let decrypted = decrypted, decrypted == testString {
-                    // Success! Just show animation, no text
+
                     showEncryptionSuccess = true
-                    
+
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) {
                         showEncryptionSuccess = false
                     }
@@ -352,11 +360,16 @@ struct HomeScreen: View {
             }
         }
     }
-    
+
+
+    // Purpose: Implements the encrypt test string operation for this feature.
+    // Parameters: string.
+    // Returns: String.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func encryptTestString(_ string: String) -> String {
         guard let data = string.data(using: .utf8) else { return "" }
         let sharedSecretHex = Secrets.fallbackEncryptionKey
-        
+
         do {
             let keyData = hexToData(hex: sharedSecretHex)
             let key = SymmetricKey(data: keyData)
@@ -366,11 +379,16 @@ struct HomeScreen: View {
             return ""
         }
     }
-    
+
+
+    // Purpose: Implements the decrypt test string operation for this feature.
+    // Parameters: base64String.
+    // Returns: String?.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func decryptTestString(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
         let sharedSecretHex = Secrets.fallbackEncryptionKey
-        
+
         do {
             let keyData = hexToData(hex: sharedSecretHex)
             let key = SymmetricKey(data: keyData)
@@ -381,7 +399,12 @@ struct HomeScreen: View {
             return nil
         }
     }
-    
+
+
+    // Purpose: Implements the hex to data operation for this feature.
+    // Parameters: hex.
+    // Returns: Data.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func hexToData(hex: String) -> Data {
         var data = Data()
         var temp = ""
@@ -398,11 +421,18 @@ struct HomeScreen: View {
     }
 }
 
-// MARK: - Helper Views
 
+// Purpose: Struct that models inner glass card behavior in this module.
+// Responsibilities: Encapsulates inner glass card behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct InnerGlassCard<Content: View>: View {
     let content: Content
 
+
+    // Purpose: Initializes the type with required runtime state.
+    // Parameters: content.
+    // Returns: New initialized instance.
+    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
@@ -422,12 +452,22 @@ struct InnerGlassCard<Content: View>: View {
     }
 }
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates tick lottie view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct TickLottieView: NSViewRepresentable {
+
+
+    // Purpose: Implements the make nsview operation for this feature.
+    // Parameters: context.
+    // Returns: NSView.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
         containerView.layer?.masksToBounds = true
-        
+
         let animationView = LottieAnimationView(name: "tick")
         animationView.contentMode = .scaleAspectFit
         animationView.loopMode = .playOnce
@@ -435,13 +475,18 @@ struct TickLottieView: NSViewRepresentable {
         animationView.backgroundBehavior = .pauseAndRestore
         animationView.autoresizingMask = [.width, .height]
         animationView.translatesAutoresizingMaskIntoConstraints = true
-        
+
         containerView.addSubview(animationView)
         animationView.play()
-        
+
         return containerView
     }
-    
+
+
+    // Purpose: Updates nsview based on current inputs.
+    // Parameters: nsView, context.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -449,12 +494,22 @@ struct TickLottieView: NSViewRepresentable {
     }
 }
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates loading lottie view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct LoadingLottieView: NSViewRepresentable {
+
+
+    // Purpose: Implements the make nsview operation for this feature.
+    // Parameters: context.
+    // Returns: NSView.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
         containerView.layer?.masksToBounds = true
-        
+
         let animationView = LottieAnimationView(name: "Loading")
         animationView.contentMode = .scaleAspectFit
         animationView.loopMode = .loop
@@ -462,13 +517,18 @@ struct LoadingLottieView: NSViewRepresentable {
         animationView.backgroundBehavior = .pauseAndRestore
         animationView.autoresizingMask = [.width, .height]
         animationView.translatesAutoresizingMaskIntoConstraints = true
-        
+
         containerView.addSubview(animationView)
         animationView.play()
-        
+
         return containerView
     }
-    
+
+
+    // Purpose: Updates nsview based on current inputs.
+    // Parameters: nsView, context.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -476,12 +536,22 @@ struct LoadingLottieView: NSViewRepresentable {
     }
 }
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates lock lottie view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct LockLottieView: NSViewRepresentable {
+
+
+    // Purpose: Implements the make nsview operation for this feature.
+    // Parameters: context.
+    // Returns: NSView.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
         containerView.layer?.masksToBounds = true
-        
+
         let animationView = LottieAnimationView(name: "lock")
         animationView.contentMode = .scaleAspectFit
         animationView.loopMode = .playOnce
@@ -489,13 +559,18 @@ struct LockLottieView: NSViewRepresentable {
         animationView.backgroundBehavior = .pauseAndRestore
         animationView.autoresizingMask = [.width, .height]
         animationView.translatesAutoresizingMaskIntoConstraints = true
-        
+
         containerView.addSubview(animationView)
         animationView.play()
-        
+
         return containerView
     }
-    
+
+
+    // Purpose: Updates nsview based on current inputs.
+    // Parameters: nsView, context.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -503,10 +578,14 @@ struct LockLottieView: NSViewRepresentable {
     }
 }
 
+
+// Purpose: Struct that models re pair button behavior in this module.
+// Responsibilities: Encapsulates re pair button behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct RePairButton: View {
     let action: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         Button(action: action) {
             ZStack {
@@ -516,7 +595,7 @@ struct RePairButton: View {
                         RoundedRectangle(cornerRadius: 24, style: .continuous)
                             .stroke(Color.white.opacity(0.1), lineWidth: 1)
                     )
-                
+
                 HStack(spacing: 6) {
                     if isHovered {
                         if #available(macOS 14.0, *) {
@@ -544,18 +623,22 @@ struct RePairButton: View {
     }
 }
 
+
+// Purpose: Struct that models check encryption card behavior in this module.
+// Responsibilities: Encapsulates check encryption card behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct CheckEncryptionCard: View {
     let encryptionTestResult: String?
     let isTestingEncryption: Bool
     let showEncryptionSuccess: Bool
     let testAction: () -> Void
-    
+
     @State private var isHovered = false
-    
+
     var body: some View {
         InnerGlassCard {
             ZStack {
-                // Main Content (Hidden when showing success animation)
+
                 VStack(alignment: .leading, spacing: 0) {
                     HStack(alignment: .top, spacing: 12) {
                         Text("Check\nEncryption")
@@ -564,9 +647,9 @@ struct CheckEncryptionCard: View {
                             .minimumScaleFactor(0.5)
                             .foregroundColor(.black)
                             .fixedSize(horizontal: false, vertical: true)
-                        
+
                         Spacer()
-                        
+
                         if #available(macOS 14.0, *) {
                             Image(systemName: "lock.shield.fill")
                                 .font(.system(size: 28))
@@ -580,11 +663,11 @@ struct CheckEncryptionCard: View {
                     }
                     .padding(.horizontal, 20)
                     .padding(.top, 20)
-                    .opacity(showEncryptionSuccess ? 0 : 1) // Hide when showing success
-                    
+                    .opacity(showEncryptionSuccess ? 0 : 1)
+
                     Spacer()
-                    
-                    // Show error text if needed
+
+
                     if let result = encryptionTestResult, !result.contains("") {
                          HStack {
                             Image(systemName: "xmark.square.fill")
@@ -596,8 +679,8 @@ struct CheckEncryptionCard: View {
                         .padding(.horizontal, 20)
                         .padding(.bottom, 8)
                     }
-                    
-                    // Button (Hidden when showing success)
+
+
                     if isHovered || isTestingEncryption {
                         Button {
                             testAction()
@@ -632,8 +715,8 @@ struct CheckEncryptionCard: View {
                             .frame(height: 56)
                     }
                 }
-                
-                // Huge Success Animation Overlay
+
+
                 if showEncryptionSuccess {
                     LockLottieView()
                         .frame(width: 150, height: 150)
@@ -651,10 +734,14 @@ struct CheckEncryptionCard: View {
     }
 }
 
+
+// Purpose: Struct that models clipboard history row behavior in this module.
+// Responsibilities: Encapsulates clipboard history row behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct ClipboardHistoryRow: View {
     let item: ClipboardItem
     let isHovered: Bool
-    
+
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
@@ -665,7 +752,7 @@ struct ClipboardHistoryRow: View {
                         .textCase(.uppercase)
                     Spacer()
                 }
-                
+
                 if isHovered {
                     Text(item.content.prefix(100) + (item.content.count > 100 ? "..." : ""))
                         .font(.system(size: 13))
@@ -683,7 +770,12 @@ struct ClipboardHistoryRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
-    
+
+
+    // Purpose: Implements the time ago operation for this feature.
+    // Parameters: date.
+    // Returns: String.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func timeAgo(from date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full

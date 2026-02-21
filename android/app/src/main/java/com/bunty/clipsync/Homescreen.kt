@@ -62,7 +62,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.bunty.clipsync.R
 
+
 @Composable
+
+
+// Purpose: Implements the homescreen operation for this feature.
+// Parameters: See signature for parameters.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun Homescreen(
     onRepairClick: () -> Unit = {},
     onResetPairing: () -> Unit = {}
@@ -70,18 +77,19 @@ fun Homescreen(
     val context = LocalContext.current
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp
-    // --- Responsive Scaling Constants ---
-    // Reference Design: 412x915 dp
+
+
     val screenWidth = configuration.screenWidthDp.dp
     val widthScale = screenWidth.value / 412f
     val heightScale = screenHeight / 915f
     val scale = min(widthScale, heightScale)
     val titleFontSize = (58 * scale).coerceIn(42f, 58f).sp
-    
+
     val scope = rememberCoroutineScope()
+
     val macDeviceName = remember { DeviceManager.getPairedMacDeviceName(context) }
-    
-    // Roboto Font Family
+
+
     val robotoFontFamily = remember {
         FontFamily(
             Font(R.font.roboto_regular, FontWeight.Normal),
@@ -91,44 +99,51 @@ fun Homescreen(
         )
     }
 
-    // --- State Initialization ---
-    
-    // UI Visibility State
+
     var showContent by remember { mutableStateOf(false) }
-    
-    // Permission States
+
+
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
+
     var isBatteryUnrestricted by remember { mutableStateOf(false) }
+
     var isSmsPermissionGranted by remember { mutableStateOf(false) }
+
     var isNotificationListenerEnabled by remember { mutableStateOf(false) }
 
-    // Update Checker State (Version Management)
+
     var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
+
     var showUpdateDialog by remember { mutableStateOf(false) }
+
     var showResetDialog by remember { mutableStateOf(false) }
     val currentVersion = "1.0.0"
 
-    // Feature Toggles (Preferences)
+
     var syncToMac by remember { mutableStateOf(DeviceManager.isSyncToMacEnabled(context)) }
     var syncFromMac by remember { mutableStateOf(DeviceManager.isSyncFromMacEnabled(context)) }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-    // Check permissions function
+
+    // Purpose: Implements the check permissions operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Unit unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     fun checkPermissions() {
         isAccessibilityEnabled = checkServiceStatus(context, ClipboardAccessibilityService::class.java)
-        
+
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         isBatteryUnrestricted = pm.isIgnoringBatteryOptimizations(context.packageName)
 
         isSmsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
                                  ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
 
-        // Check if notification listener is enabled
+
         isNotificationListenerEnabled = isNotificationServiceEnabled(context)
     }
 
-    // Auto-refresh on Resume
+
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
@@ -141,12 +156,12 @@ fun Homescreen(
         }
     }
 
+
     LaunchedEffect(Unit) {
         delay(100)
         showContent = true
-        checkPermissions() // Initial check
-        
-        // Check for updates
+        checkPermissions()
+
         scope.launch {
             val info = UpdateChecker.checkForUpdates("v$currentVersion")
             if (info != null) {
@@ -156,12 +171,12 @@ fun Homescreen(
         }
     }
 
-    // Update Dialog
+
     if (showUpdateDialog && updateInfo != null) {
         AlertDialog(
             onDismissRequest = { showUpdateDialog = false },
             title = { Text(text = "Update Available ") },
-            text = { 
+            text = {
                 Column {
                     Text("A new version (${updateInfo!!.version}) is available!")
                     Spacer(modifier = Modifier.height(8.dp))
@@ -169,6 +184,7 @@ fun Homescreen(
                 }
             },
             confirmButton = {
+
                 TextButton(
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
@@ -187,7 +203,7 @@ fun Homescreen(
         )
     }
 
-    // Reset Pairing Confirmation Dialog
+
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
@@ -199,6 +215,7 @@ fun Homescreen(
                 TextButton(
                     onClick = {
                         showResetDialog = false
+
                         FirestoreManager.clearPairing(
                             context,
                             onSuccess = {
@@ -222,22 +239,18 @@ fun Homescreen(
         )
     }
 
-    // --- Side Effects ---
 
-    // 1. Service Listener for Real-Time Sync
-    // Listens to Firestore changes and notifies user/updates state if needed
     DisposableEffect(Unit) {
         val registration = FirestoreManager.listenToClipboard(context) { text ->
-             // Only process if Sync FROM Mac is enabled
+
              if (DeviceManager.isSyncFromMacEnabled(context)) {
-                 // The service or listener handles the actual clipboard set logic
-                 // But we might want to show a toast or something here if managed in UI
+
              }
         }
         onDispose { registration?.remove() }
     }
 
-    // Animation State
+
     val contentAlpha by animateFloatAsState(
         targetValue = if (showContent) 1f else 0f,
         animationSpec = tween(1000)
@@ -253,15 +266,16 @@ fun Homescreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
+
             Spacer(modifier = Modifier.height((72 * heightScale).dp))
 
-            // Title - "Settings" (White Color as requested)
+
             Text(
                 text = "Settings",
                 fontFamily = robotoFontFamily,
                 fontWeight = FontWeight.Black,
                 fontSize = titleFontSize,
-                color = Color.White, // CHANGED TO WHITE
+                color = Color.White,
                 letterSpacing = (-0.03).em,
                 modifier = Modifier
                     .alpha(contentAlpha)
@@ -270,7 +284,7 @@ fun Homescreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Main Content
+
             AnimatedVisibility(
                 visible = showContent,
                 enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { 40 }, animationSpec = tween(400))
@@ -278,10 +292,11 @@ fun Homescreen(
                  Column(
                     verticalArrangement = Arrangement.spacedBy((28 * scale).dp)
                 ) {
-                    // --- Device Management ---
+
+
                     Column {
                         SectionHeader(text = "Device", fontFamily = robotoFontFamily, scale = scale)
-                        
+
                         InnerWhiteCard(scale = scale) {
                             Row(
                                 modifier = Modifier
@@ -290,6 +305,7 @@ fun Homescreen(
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
+
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Icon(
                                         imageVector = Icons.Default.Computer,
@@ -316,6 +332,7 @@ fun Homescreen(
                                     }
                                 }
 
+
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape((20 * scale).dp))
@@ -338,17 +355,18 @@ fun Homescreen(
                         }
                     }
 
-                    // --- Preferences (Sync Toggles) ---
+
                     Column {
                         SectionHeader(text = "Preferences", fontFamily = robotoFontFamily, scale = scale)
-                        
+
                         InnerWhiteCard(scale = scale) {
                             Column(modifier = Modifier.padding((20 * scale).dp)) {
-                                // Sync To Mac
+
+
                                 PreferenceRow(
                                     label = "Sync to Mac",
                                     checked = syncToMac,
-                                    onCheckedChange = { 
+                                    onCheckedChange = {
                                         syncToMac = it
                                         DeviceManager.setSyncToMacEnabled(context, it)
                                     },
@@ -357,12 +375,12 @@ fun Homescreen(
                                 )
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (12 * scale).dp), color = Color(0xFFE5E5EA))
-                                
-                                // Sync From Mac
+
+
                                 PreferenceRow(
                                     label = "Sync from Mac",
                                     checked = syncFromMac,
-                                    onCheckedChange = { 
+                                    onCheckedChange = {
                                         syncFromMac = it
                                         DeviceManager.setSyncFromMacEnabled(context, it)
                                     },
@@ -373,12 +391,13 @@ fun Homescreen(
                         }
                     }
 
-                    // --- System Status ---
+
                     Column {
                         SectionHeader(text = "System Status", fontFamily = robotoFontFamily, scale = scale)
-                        
+
                         InnerWhiteCard(scale = scale) {
                             Column(modifier = Modifier.padding((20 * scale).dp)) {
+
                                 StatusRow(
                                     label = "Clipboard Sync",
                                     isActive = isAccessibilityEnabled,
@@ -392,12 +411,12 @@ fun Homescreen(
                                         }
                                     }
                                 )
-                                
+
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-                                // Remote Device Status
+
                                 StatusRow(
-                                    label = "Mac Clipboard", // Changed name
+                                    label = "Mac Clipboard",
                                     isActive = (macDeviceName != "Unknown Device"),
                                     fontFamily = robotoFontFamily,
                                     scale = scale
@@ -405,7 +424,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-                                // Battery Optimization Status
+
                                 StatusRow(
                                     label = "Background Sync",
                                     isActive = isBatteryUnrestricted,
@@ -428,7 +447,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-                                // OTP Detection Status (SMS)
+
                                 StatusRow(
                                     label = "SMS OTP Detection",
                                     isActive = isSmsPermissionGranted,
@@ -451,7 +470,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-                                // Email OTP Detection Status
+
                                 StatusRow(
                                     label = "Email OTP Detection",
                                     isActive = isNotificationListenerEnabled,
@@ -471,8 +490,8 @@ fun Homescreen(
                                 )
                             }
                         }
-                        
-                        // Show warning if ANY critical permission is missing
+
+
                         if (!isAccessibilityEnabled || !isBatteryUnrestricted || !isSmsPermissionGranted || !isNotificationListenerEnabled) {
                             Spacer(modifier = Modifier.height((12 * scale).dp))
                             Row(verticalAlignment = Alignment.Top) {
@@ -495,11 +514,11 @@ fun Homescreen(
                         }
                     }
 
-                    // --- Actions ---
+
                     Column {
                         SectionHeader(text = "Actions", fontFamily = robotoFontFamily, scale = scale)
 
-                        // Send Test
+
                         ActionButton(
                             text = "Send Test Clipboard",
                             icon = Icons.Default.Share,
@@ -510,14 +529,14 @@ fun Homescreen(
                              FirestoreManager.sendClipboard(context, "Hello from ClipSync! ")
                              Toast.makeText(context, "Sent to Mac!", Toast.LENGTH_SHORT).show()
                         }
-                        
+
                         Spacer(modifier = Modifier.height((16 * scale).dp))
-                        
-                        // Clear Cloud Clipboard
+
+
                         ActionButton(
                             text = "Clear Cloud Clipboard",
                             icon = Icons.Default.Delete,
-                            backgroundColor = Color(0xFFFF3B30), // Red
+                            backgroundColor = Color(0xFFFF3B30),
                             fontFamily = robotoFontFamily,
                             scale = scale
                         ) {
@@ -534,24 +553,24 @@ fun Homescreen(
 
                         Spacer(modifier = Modifier.height((16 * scale).dp))
 
-                        // Test OTP Detection
+
                         ActionButton(
                             text = "Test OTP Detection",
                             icon = Icons.Default.CheckCircle,
-                            backgroundColor = Color(0xFF34C759), // Green
+                            backgroundColor = Color(0xFF34C759),
                             fontFamily = robotoFontFamily,
                             scale = scale
                         ) {
-                            // Generate a test OTP code
+
                             val testOTP = (100000..999999).random().toString()
 
-                            // Copy to clipboard using ClipboardGhostActivity
+
                             ClipboardGhostActivity.copyToClipboard(context, testOTP)
 
-                            // Send OTP notification to Mac
+
                             OTPNotificationService.notifyOTPDetected(context, testOTP)
 
-                            // Show confirmation
+
                             Toast.makeText(
                                 context,
                                 "Test OTP sent to Mac: $testOTP",
@@ -561,11 +580,11 @@ fun Homescreen(
 
                         Spacer(modifier = Modifier.height((16 * scale).dp))
 
-                        // Reset Pairing
+
                         ActionButton(
                             text = "Reset Pairing",
                             icon = Icons.Default.Refresh,
-                            backgroundColor = Color(0xFFFF9500), // Orange
+                            backgroundColor = Color(0xFFFF9500),
                             fontFamily = robotoFontFamily,
                             scale = scale
                         ) {
@@ -574,10 +593,10 @@ fun Homescreen(
                     }
                 }
             }
-            
+
             Spacer(modifier = Modifier.weight(1f))
-            
-            // Footer
+
+
             Box(
                 modifier = Modifier.fillMaxWidth().padding(top = (32 * scale).dp),
                 contentAlignment = Alignment.Center
@@ -589,16 +608,19 @@ fun Homescreen(
                     color = Color(0xFF3C3C43).copy(alpha = 0.4f)
                 )
             }
-            
+
             Spacer(modifier = Modifier.height((24 * scale).dp))
         }
     }
 }
 
 
-// --- Helper Composables ---
-
 @Composable
+
+// Purpose: Implements the section header operation for this feature.
+// Parameters: text, fontFamily, scale.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun SectionHeader(text: String, fontFamily: FontFamily, scale: Float = 1f) {
     Text(
         text = text,
@@ -610,7 +632,13 @@ fun SectionHeader(text: String, fontFamily: FontFamily, scale: Float = 1f) {
     )
 }
 
+
 @Composable
+
+// Purpose: Implements the inner white card operation for this feature.
+// Parameters: scale, content.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun InnerWhiteCard(scale: Float = 1f, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
@@ -632,7 +660,13 @@ fun InnerWhiteCard(scale: Float = 1f, content: @Composable () -> Unit) {
     }
 }
 
+
 @Composable
+
+// Purpose: Implements the preference row operation for this feature.
+// Parameters: label, checked, onCheckedChange, fontFamily, scale.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun PreferenceRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, fontFamily: FontFamily, scale: Float = 1f) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -647,12 +681,12 @@ fun PreferenceRow(label: String, checked: Boolean, onCheckedChange: (Boolean) ->
             fontWeight = FontWeight.Medium
         )
         Switch(
-            checked = checked, 
+            checked = checked,
             onCheckedChange = onCheckedChange,
             modifier = Modifier.scale(scale),
             colors = SwitchDefaults.colors(
                 checkedThumbColor = Color.White,
-                checkedTrackColor = Color(0xFF34C759), // iOS Green
+                checkedTrackColor = Color(0xFF34C759),
                 uncheckedThumbColor = Color.White,
                 uncheckedTrackColor = Color(0xFFE9E9EA),
                 uncheckedBorderColor = Color.Transparent
@@ -661,7 +695,13 @@ fun PreferenceRow(label: String, checked: Boolean, onCheckedChange: (Boolean) ->
     }
 }
 
+
 @Composable
+
+// Purpose: Implements the status row operation for this feature.
+// Parameters: See signature for parameters.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun StatusRow(
     label: String,
     isActive: Boolean,
@@ -687,9 +727,9 @@ fun StatusRow(
         val iconColor = when {
             isActive -> Color(0xFF34C759)
             isWarning -> Color(0xFFFF9500)
-            else -> Color(0xFFFF3B30) // Red for error/inactive
+            else -> Color(0xFFFF3B30)
         }
-        
+
         Icon(
             imageVector = icon,
             contentDescription = null,
@@ -704,7 +744,7 @@ fun StatusRow(
             fontFamily = fontFamily,
             modifier = Modifier.weight(1f)
         )
-        
+
         if (isActive) {
             Text(
                 text = "Active",
@@ -714,7 +754,7 @@ fun StatusRow(
                 fontWeight = FontWeight.Medium
             )
         } else {
-            // "Fix" Button
+
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape((14 * scale).dp))
@@ -733,7 +773,13 @@ fun StatusRow(
     }
 }
 
+
 @Composable
+
+// Purpose: Implements the action button operation for this feature.
+// Parameters: text, icon, backgroundColor, fontFamily, scale, onClick.
+// Returns: Unit unless returned explicitly.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFamily: FontFamily, scale: Float = 1f, onClick: () -> Unit) {
     Box(
         modifier = Modifier
@@ -761,7 +807,7 @@ fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFa
             Icon(
                 imageVector = icon,
                 contentDescription = null,
-                tint = backgroundColor, // Icon color matches the theme color
+                tint = backgroundColor,
                 modifier = Modifier.size((22 * scale).dp)
             )
             Spacer(modifier = Modifier.width((10 * scale).dp))
@@ -770,18 +816,28 @@ fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFa
                 fontFamily = fontFamily,
                 fontWeight = FontWeight.SemiBold,
                 fontSize = (17 * scale).coerceIn(15f, 17f).sp,
-                color = backgroundColor // Text color matches the theme color
+                color = backgroundColor
             )
         }
     }
 }
 
+
+// Purpose: Implements the check service status operation for this feature.
+// Parameters: context, service.
+// Returns: Boolean.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 private fun checkServiceStatus(context: Context, service: Class<*>): Boolean {
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
     val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
     return enabledServices.any { it.resolveInfo.serviceInfo.name == service.name }
 }
 
+
+// Purpose: Evaluates whether is notification service enabled.
+// Parameters: context.
+// Returns: Boolean.
+// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 private fun isNotificationServiceEnabled(context: Context): Boolean {
     val packageName = context.packageName
     val enabledListeners = Settings.Secure.getString(
@@ -790,4 +846,3 @@ private fun isNotificationServiceEnabled(context: Context): Boolean {
     )
     return enabledListeners?.contains(packageName) == true
 }
-

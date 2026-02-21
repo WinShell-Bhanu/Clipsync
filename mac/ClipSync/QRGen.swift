@@ -1,54 +1,56 @@
-//
-// QRGenScreen.swift
-// ClipSync - Production Version with Country Selection
-//
+
+
 
 import Foundation
 import SwiftUI
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates qrgen screen behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct QRGenScreen: View {
-    // Animation States
+
     @State private var titleOpacity: Double = 0
     @State private var titleOffset: CGFloat = -30
-    
+
     @State private var card1Opacity: Double = 0
     @State private var card1Offset: CGFloat = -20
-    
+
     @State private var card2Opacity: Double = 0
     @State private var card2Offset: CGFloat = -20
-    
+
     @State private var card3Opacity: Double = 0
     @State private var card3Offset: CGFloat = -20
-    
+
     @State private var qrCardOpacity: Double = 0
     @State private var qrCardScale: CGFloat = 0.85
-    
-    // Country Selection
+
+
     @State private var selectedCountry: String = ""
     @State private var detectedCountry: String = ""
     @State private var showCountryPicker: Bool = false
     @State private var isDetecting: Bool = true
-    
-    // Backend managers
+
+
     @StateObject private var qrGenerator = QRCodeGenerator.shared
     @StateObject private var pairingManager = PairingManager.shared
     @State private var navigateToConnected = false
-    
+
     #if DEBUG
     @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
         ZStack {
-            // Base background
+
             MeshBackground()
                 .ignoresSafeArea()
-            
-            // Content - CENTERED
+
+
             HStack(alignment: .center, spacing: 40) {
-                // LEFT COLUMN: Title + Steps
+
                 VStack(alignment: .leading, spacing: 40) {
-                    // Title
+
                     Text("One Scan.\nInfinite Sync.")
                         .font(.custom("SF Pro Display", size: 52))
                         .fontWeight(.bold)
@@ -59,22 +61,22 @@ struct QRGenScreen: View {
                         .padding(.bottom, 8)
                         .opacity(titleOpacity)
                         .offset(y: titleOffset)
-                    
-                    // Card 1
+
+
                     ZStack {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .fill(Color.white.opacity(0.4))
-                        
+
                         Image("android")
                             .resizable()
                             .renderingMode(.template)
                             .foregroundColor(.black)
                             .frame(width: 32, height: 20)
                             .offset(x: 130, y: 35)
-                        
+
                         HStack(alignment: .center, spacing: 14) {
                             NumberCircleView(number: "1")
-                            
+
                             Text("Open ClipSync app on your\nAndroid Phone")
                                 .font(.custom("SF Pro", size: 19))
                                 .fontWeight(.medium)
@@ -89,18 +91,18 @@ struct QRGenScreen: View {
                     .clipShape(RoundedRectangle(cornerRadius: 28, style: .continuous))
                     .opacity(card1Opacity)
                     .offset(y: card1Offset)
-                    
-                    // Card 2
+
+
                     HStack(alignment: .center, spacing: 14) {
                         NumberCircleView(number: "2")
-                        
+
                         Text("Tap \"Scan QR\" inside the\napp")
                             .font(.custom("SF Pro", size: 18))
                             .fontWeight(.medium)
                             .lineSpacing(3)
                             .multilineTextAlignment(.leading)
                             .foregroundColor(Color(red: 0.125, green: 0.263, blue: 0.600))
-                        
+
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16)
@@ -111,18 +113,18 @@ struct QRGenScreen: View {
                     )
                     .opacity(card2Opacity)
                     .offset(y: card2Offset)
-                    
-                    // Card 3
+
+
                     HStack(alignment: .center, spacing: 14) {
                         NumberCircleView(number: "3")
-                        
+
                         Text("Point your phone's camera at\nthis QR Code")
                             .font(.custom("SF Pro", size: 18))
                             .fontWeight(.medium)
                             .lineSpacing(3)
                             .multilineTextAlignment(.leading)
                             .foregroundColor(Color(red: 0.125, green: 0.263, blue: 0.600))
-                        
+
                         Spacer(minLength: 0)
                     }
                     .padding(.horizontal, 16)
@@ -136,10 +138,10 @@ struct QRGenScreen: View {
                 }
                 .frame(width: 350)
                 .offset(y: 20)
-                
-                // RIGHT COLUMN: QR Card + Country Selector
+
+
                 VStack(alignment: .center, spacing: 16) {
-                    // Country Selector Button
+
                     Button(action: {
                         showCountryPicker.toggle()
                     }) {
@@ -152,12 +154,12 @@ struct QRGenScreen: View {
                                 Image(systemName: "globe")
                                     .font(.system(size: 14))
                             }
-                            
+
                             Text(selectedCountry.isEmpty ? "Detecting location..." : selectedCountry)
                                 .font(.custom("SF Pro", size: 14))
                                 .fontWeight(.medium)
                                 .lineLimit(1)
-                            
+
                             if !isDetecting {
                                 Image(systemName: "chevron.down")
                                     .font(.system(size: 10))
@@ -185,12 +187,12 @@ struct QRGenScreen: View {
                             }
                         )
                     }
-                    
-                    // QR Card
+
+
                     ZStack {
                         RoundedRectangle(cornerRadius: 28, style: .continuous)
                             .fill(Color.white.opacity(0.4))
-                        
+
                         VStack(spacing: 10) {
                             Group {
                                 if let qrImage = qrGenerator.qrImage {
@@ -203,12 +205,12 @@ struct QRGenScreen: View {
                                 }
                             }
                             .frame(width: 140, height: 140)
-                            
+
                             ZStack {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
                                     .fill(Color(red: 0.576, green: 0.647, blue: 0.816).opacity(0.5))
                                     .frame(width: 140, height: 30)
-                                
+
                                 Text(DeviceManager.shared.getFriendlyMacName())
                                     .font(.custom("SF Pro", size: 14))
                                     .fontWeight(.medium)
@@ -220,14 +222,14 @@ struct QRGenScreen: View {
                     .frame(width: 170, height: 210)
                     .opacity(qrCardOpacity)
                     .scaleEffect(qrCardScale)
-                    
-                    // Server indicator
+
+
                     if !selectedCountry.isEmpty && !isDetecting {
                         HStack(spacing: 6) {
                             Circle()
                                 .fill(Color.green)
                                 .frame(width: 6, height: 6)
-                            
+
                             let region = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
                             Text("Connected to \(region == "US" ? "🇺🇸 US" : "🇮🇳 India") server")
                                 .font(.custom("SF Pro", size: 11))
@@ -245,12 +247,12 @@ struct QRGenScreen: View {
                 .offset(y: 60)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            
-            // Simple waiting indicator at bottom
+
+
             if !pairingManager.isPaired {
                 VStack {
                     Spacer()
-                    
+
                     HStack {
                         ProgressView()
                             .scaleEffect(0.7)
@@ -283,8 +285,12 @@ struct QRGenScreen: View {
         }
         .enableInjection()
     }
-    
-    // MARK: - Region Detection & Setup
+
+
+    // Purpose: Implements the detect and setup region operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func detectAndSetupRegion() {
         if let savedCountry = UserDefaults.standard.string(forKey: "selected_country_name") {
             self.selectedCountry = savedCountry
@@ -293,13 +299,13 @@ struct QRGenScreen: View {
             self.updateServerRegion(for: savedCountry)
             return
         }
-        
+
         isDetecting = true
-        
+
         LocationHelper.shared.detectRegion { countryCode in
             DispatchQueue.main.async {
                 self.isDetecting = false
-                
+
                 if let countryCode = countryCode {
                     let countryName = self.findCountryName(from: countryCode)
                     self.detectedCountry = countryName
@@ -313,18 +319,23 @@ struct QRGenScreen: View {
             }
         }
     }
-    
+
+
+    // Purpose: Implements the find country name operation for this feature.
+    // Parameters: code.
+    // Returns: String.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func findCountryName(from code: String) -> String {
         let codeToName: [String: String] = [
-            // Americas
+
             "US": "United States", "CA": "Canada", "MX": "Mexico", "BR": "Brazil",
             "AR": "Argentina", "CL": "Chile", "CO": "Colombia", "PE": "Peru",
             "VE": "Venezuela", "EC": "Ecuador", "UY": "Uruguay", "CR": "Costa Rica",
             "PA": "Panama", "GT": "Guatemala", "CU": "Cuba", "DO": "Dominican Republic",
             "HN": "Honduras", "NI": "Nicaragua", "SV": "El Salvador", "PY": "Paraguay",
             "BO": "Bolivia", "JM": "Jamaica", "TT": "Trinidad and Tobago",
-            
-            // Europe
+
+
             "GB": "United Kingdom", "UK": "United Kingdom", "DE": "Germany",
             "FR": "France", "IT": "Italy", "ES": "Spain", "NL": "Netherlands",
             "SE": "Sweden", "NO": "Norway", "DK": "Denmark", "FI": "Finland",
@@ -336,8 +347,8 @@ struct QRGenScreen: View {
             "LU": "Luxembourg", "CY": "Cyprus", "MT": "Malta", "BA": "Bosnia and Herzegovina",
             "AL": "Albania", "MK": "North Macedonia", "ME": "Montenegro", "MD": "Moldova",
             "BY": "Belarus",
-            
-            // Asia
+
+
             "IN": "India", "CN": "China", "JP": "Japan", "KR": "South Korea",
             "SG": "Singapore", "TH": "Thailand", "MY": "Malaysia", "VN": "Vietnam",
             "PH": "Philippines", "ID": "Indonesia", "PK": "Pakistan", "BD": "Bangladesh",
@@ -345,19 +356,19 @@ struct QRGenScreen: View {
             "HK": "Hong Kong", "TW": "Taiwan", "NP": "Nepal", "BT": "Bhutan",
             "AF": "Afghanistan", "MN": "Mongolia", "BN": "Brunei", "MO": "Macao",
             "MV": "Maldives", "TL": "Timor-Leste",
-            
-            // Oceania
+
+
             "AU": "Australia", "NZ": "New Zealand", "PG": "Papua New Guinea",
             "FJ": "Fiji", "SB": "Solomon Islands", "WS": "Samoa", "TO": "Tonga",
             "VU": "Vanuatu",
-            
-            // Middle East
+
+
             "AE": "United Arab Emirates", "SA": "Saudi Arabia", "QA": "Qatar",
             "KW": "Kuwait", "OM": "Oman", "BH": "Bahrain", "JO": "Jordan",
             "LB": "Lebanon", "IR": "Iran", "IQ": "Iraq", "YE": "Yemen",
             "SY": "Syria", "TR": "Turkey", "IL": "Israel",
-            
-            // Africa
+
+
             "ZA": "South Africa", "EG": "Egypt", "NG": "Nigeria", "KE": "Kenya",
             "MA": "Morocco", "DZ": "Algeria", "TN": "Tunisia", "LY": "Libya",
             "GH": "Ghana", "ET": "Ethiopia", "TZ": "Tanzania", "UG": "Uganda",
@@ -367,22 +378,27 @@ struct QRGenScreen: View {
             "MG": "Madagascar", "ML": "Mali", "BF": "Burkina Faso", "NE": "Niger",
             "TD": "Chad", "CG": "Congo", "CD": "Democratic Republic of the Congo",
             "SD": "Sudan",
-            
-            // Central Asia
+
+
             "RU": "Russia", "KZ": "Kazakhstan", "UZ": "Uzbekistan",
             "TM": "Turkmenistan", "KG": "Kyrgyzstan", "TJ": "Tajikistan",
             "AZ": "Azerbaijan", "AM": "Armenia", "GE": "Georgia"
         ]
-        
-        return codeToName[code] ?? "India" // Default fallback
+
+        return codeToName[code] ?? "India"
     }
-    
+
+
+    // Purpose: Updates server region based on current inputs.
+    // Parameters: country.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func updateServerRegion(for country: String) {
         let newRegion = RegionConfig.getOptimalServer(for: country)
         let currentRegion = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
-        
+
         UserDefaults.standard.set(country, forKey: "selected_country_name")
-        
+
         if newRegion != currentRegion {
             UserDefaults.standard.set(newRegion, forKey: "server_region")
             UserDefaults.standard.synchronize()
@@ -391,51 +407,65 @@ struct QRGenScreen: View {
             qrGenerator.generateQRCode()
         }
     }
-    
+
+
+    // Purpose: Implements the restart app operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func restartApp() {
         let url = URL(fileURLWithPath: Bundle.main.bundlePath)
         let config = NSWorkspace.OpenConfiguration()
         config.activates = true
-        
+
         NSWorkspace.shared.openApplication(at: url, configuration: config) { _, _ in
             DispatchQueue.main.async {
                 NSApp.terminate(nil)
             }
         }
     }
-    
-    // MARK: - Animation Functions
+
+
+    // Purpose: Implements the play entrance animations operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func playEntranceAnimations() {
         withAnimation(.spring(response: 0.8, dampingFraction: 0.75, blendDuration: 0).delay(0.1)) {
             titleOpacity = 1
             titleOffset = 0
         }
-        
+
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75, blendDuration: 0).delay(0.2)) {
             card1Opacity = 1
             card1Offset = 0
         }
-        
+
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75, blendDuration: 0).delay(0.35)) {
             card2Opacity = 1
             card2Offset = 0
         }
-        
+
         withAnimation(.spring(response: 0.7, dampingFraction: 0.75, blendDuration: 0).delay(0.5)) {
             card3Opacity = 1
             card3Offset = 0
         }
-        
+
         withAnimation(.spring(response: 0.8, dampingFraction: 0.7, blendDuration: 0).delay(0.65)) {
             qrCardOpacity = 1
             qrCardScale = 1.0
         }
-        
+
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
             startQRFloat()
         }
     }
-    
+
+
+    // Purpose: Starts qrfloat flow and required listeners.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func startQRFloat() {
         withAnimation(.easeInOut(duration: 2.5).repeatForever(autoreverses: true)) {
             qrCardScale = 1.02
@@ -443,14 +473,17 @@ struct QRGenScreen: View {
     }
 }
 
-// MARK: - Country Picker View
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates country picker view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct CountryPickerView: View {
     @Binding var selectedCountry: String
     let detectedCountry: String
     let onSelect: (String) -> Void
-    
+
     @State private var searchText = ""
-    
+
     var filteredCountries: [String] {
         let countries = RegionConfig.sortedCountryNames
         if searchText.isEmpty {
@@ -458,30 +491,30 @@ struct CountryPickerView: View {
         }
         return countries.filter { $0.localizedCaseInsensitiveContains(searchText) }
     }
-    
+
     var body: some View {
         VStack(spacing: 0) {
-            // Header
+
             HStack {
                 Text("Select Your Country")
                     .font(.system(size: 16, weight: .semibold))
                     .foregroundColor(.primary)
-                
+
                 Spacer()
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 12)
             .background(Color(NSColor.controlBackgroundColor))
-            
+
             Divider()
-            
-            // Search bar
+
+
             HStack {
                 Image(systemName: "magnifyingglass")
                     .foregroundColor(.secondary)
                 TextField("Search countries...", text: $searchText)
                     .textFieldStyle(.plain)
-                
+
                 if !searchText.isEmpty {
                     Button(action: { searchText = "" }) {
                         Image(systemName: "xmark.circle.fill")
@@ -495,8 +528,8 @@ struct CountryPickerView: View {
             .cornerRadius(8)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            
-            // Country list
+
+
             ScrollView {
                 LazyVStack(spacing: 0) {
                     ForEach(filteredCountries, id: \.self) { country in
@@ -507,9 +540,9 @@ struct CountryPickerView: View {
                                 Text(country)
                                     .font(.system(size: 14))
                                     .foregroundColor(.primary)
-                                
+
                                 Spacer()
-                                
+
                                 if country == detectedCountry {
                                     Text("Auto-detected")
                                         .font(.system(size: 11))
@@ -519,14 +552,14 @@ struct CountryPickerView: View {
                                         .background(Color.blue.opacity(0.1))
                                         .cornerRadius(6)
                                 }
-                                
+
                                 if country == selectedCountry {
                                     Image(systemName: "checkmark")
                                         .foregroundColor(.blue)
                                         .font(.system(size: 14, weight: .semibold))
                                 }
-                                
-                                // Show server indicator
+
+
                                 let server = RegionConfig.getOptimalServer(for: country)
                                 Text(server == "US" ? "🇺🇸" : "🇮🇳")
                                     .font(.system(size: 14))
@@ -540,7 +573,7 @@ struct CountryPickerView: View {
                             )
                         }
                         .buttonStyle(.plain)
-                        
+
                         if country != filteredCountries.last {
                             Divider()
                                 .padding(.leading, 16)
@@ -555,6 +588,10 @@ struct CountryPickerView: View {
     }
 }
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates number circle view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 private struct NumberCircleView: View {
     let number: String
     #if DEBUG
@@ -565,7 +602,7 @@ private struct NumberCircleView: View {
         ZStack {
             Circle()
                 .fill(.regularMaterial)
-            
+
             Circle()
                 .fill(
                     LinearGradient(
@@ -574,7 +611,7 @@ private struct NumberCircleView: View {
                         endPoint: .bottomTrailing
                     )
                 )
-            
+
             Circle()
                 .strokeBorder(
                     LinearGradient(
@@ -585,7 +622,7 @@ private struct NumberCircleView: View {
                     lineWidth: 1
                 )
                 .blendMode(.overlay)
-            
+
             Text(number)
                 .font(.custom("SF Pro", size: 16))
                 .fontWeight(.bold)

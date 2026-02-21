@@ -1,25 +1,27 @@
-//
-// MenuBarView.swift
-// ClipSync
-//
+
+
 
 import SwiftUI
 import LocalAuthentication
 
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates menu bar view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct MenuBarView: View {
     @Environment(\.openWindow) var openWindow
     @StateObject private var pairingManager = PairingManager.shared
     @StateObject private var clipboardManager = ClipboardManager.shared
     @StateObject private var qrGenerator = QRCodeGenerator.shared
-    
-    // View States
+
+
     @State private var showingRePairQR = false
     @State private var isHoveringSend = false
     @State private var isHoveringPull = false
     @State private var isHoveringSettings = false
     @State private var isHoveringQuit = false
-    @State private var isAuthenticating = false // Prevents double prompts
-    
+    @State private var isAuthenticating = false
+
     #if DEBUG
     @ObserveInjection var forceRedraw
     #endif
@@ -32,7 +34,7 @@ struct MenuBarView: View {
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.primary)
                         .padding(.top, 20)
-                    
+
                     if let qrImage = qrGenerator.qrImage {
                         Image(nsImage: qrImage)
                             .interpolation(.none)
@@ -45,11 +47,11 @@ struct MenuBarView: View {
                     } else {
                         ProgressView().frame(width: 160, height: 160)
                     }
-                    
+
                     Text(DeviceManager.shared.getFriendlyMacName())
                         .font(.system(size: 12))
                         .foregroundColor(.secondary)
-                    
+
                     Button("Cancel") {
                         withAnimation(.spring()) { showingRePairQR = false }
                     }
@@ -64,32 +66,32 @@ struct MenuBarView: View {
                     pairingManager.listenForPairing(macDeviceId: DeviceManager.shared.getDeviceId())
                 }
                 .onDisappear { pairingManager.stopListening() }
-                
+
             } else {
                 VStack(spacing: 16) {
-                    
+
                     HStack(spacing: 12) {
-                        // Connection Dot
+
                         Circle()
                             .fill(connectionStatusColor)
                             .frame(width: 8, height: 8)
                             .shadow(color: connectionStatusColor.opacity(0.5), radius: 4)
-                        
+
                         VStack(alignment: .leading, spacing: 2) {
                             Text(pairingManager.isPaired ? pairingManager.pairedDeviceName : "Not Connected")
                                 .font(.system(size: 14, weight: .semibold))
                                 .foregroundColor(.primary)
-                            
+
                             if pairingManager.isPaired {
                                 Text(lastSyncedText)
                                     .font(.system(size: 11))
                                     .foregroundColor(.secondary)
                             }
                         }
-                        
+
                         Spacer()
-                        
-                        // Sync Toggle (Mac Style Switch logic or Button)
+
+
                         Button(action: { clipboardManager.toggleSync() }) {
                             Image(systemName: clipboardManager.isSyncPaused ? "pause.circle.fill" : "play.circle.fill")
                                 .font(.system(size: 20))
@@ -100,14 +102,14 @@ struct MenuBarView: View {
                     }
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
-                    
+
                     Divider()
                         .padding(.horizontal, 16)
                         .opacity(0.5)
-                    
-                    // Actions Grid
+
+
                     HStack(spacing: 12) {
-                        // Send Button
+
                         MenuActionButton(
                             title: "Send",
                             icon: "arrow.up.circle",
@@ -116,8 +118,8 @@ struct MenuBarView: View {
                         ) {
                             clipboardManager.startMonitoring()
                         }
-                        
-                        // Pull Button
+
+
                         MenuActionButton(
                             title: "Pull",
                             icon: "arrow.down.circle",
@@ -128,8 +130,8 @@ struct MenuBarView: View {
                         }
                     }
                     .padding(.horizontal, 16)
-                    
-                    // Footer Links
+
+
                     HStack {
                         Button(action: {
                             if let window = NSApp.windows.first(where: { $0.identifier?.rawValue == "mainWindow" }) {
@@ -144,20 +146,20 @@ struct MenuBarView: View {
                                 .labelStyle(FooterLabelStyle())
                         }
                         .buttonStyle(.plain)
-                        
+
                         Spacer()
-                        
+
                         Button(action: {
-                            authenticateUser() // Triggers re-pair
+                            authenticateUser()
                         }) {
                             Label("Re-pair", systemImage: "qrcode")
                                 .labelStyle(FooterLabelStyle())
                         }
                         .buttonStyle(.plain)
-                        .disabled(isAuthenticating) // Disable while checking
-                        
+                        .disabled(isAuthenticating)
+
                         Spacer()
-                        
+
                         Button(action: { NSApplication.shared.terminate(nil) }) {
                             Label("Quit", systemImage: "power")
                                 .labelStyle(FooterLabelStyle(isDestructive: true))
@@ -173,32 +175,37 @@ struct MenuBarView: View {
         }
         .enableInjection()
     }
-    
-    // MARK: - Computed Props
+
+
     var connectionStatusColor: Color {
         if !pairingManager.isPaired { return .secondary }
         return clipboardManager.isSyncPaused ? .orange : .green
     }
-    
+
     var lastSyncedText: String {
         guard let date = clipboardManager.lastSyncedTime else { return "Ready to sync" }
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .short
         return "Synced " + formatter.localizedString(for: date, relativeTo: Date())
     }
-    
+
+
+    // Purpose: Implements the authenticate user operation for this feature.
+    // Parameters: No parameters.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func authenticateUser() {
-        if isAuthenticating { return } // Guard against double clicks
+        if isAuthenticating { return }
         isAuthenticating = true
-        
+
         let context = LAContext()
         var error: NSError?
-        
+
         if context.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error) {
             context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: "Authenticate to re-pair") { success, _ in
                 DispatchQueue.main.async {
-                    self.isAuthenticating = false // Reset flag
-                    
+                    self.isAuthenticating = false
+
                     if success {
                         withAnimation {
                             self.pairingManager.clearPairing(
@@ -231,22 +238,24 @@ struct MenuBarView: View {
     }
 }
 
-// MARK: - Subviews & Styles
 
+// Purpose: Struct that models menu action button behavior in this module.
+// Responsibilities: Encapsulates menu action button behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct MenuActionButton: View {
     let title: String
     let icon: String
     let color: Color
     @Binding var isHovering: Bool
     let action: () -> Void
-    
+
     var body: some View {
         Button(action: action) {
             VStack(spacing: 6) {
                 Image(systemName: icon)
                     .font(.system(size: 22, weight: .medium))
                     .foregroundColor(color)
-                
+
                 Text(title)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.primary)
@@ -263,9 +272,18 @@ struct MenuActionButton: View {
     }
 }
 
+
+// Purpose: Struct that models footer label style behavior in this module.
+// Responsibilities: Encapsulates footer label style behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct FooterLabelStyle: LabelStyle {
     var isDestructive: Bool = false
-    
+
+
+    // Purpose: Implements the make body operation for this feature.
+    // Parameters: configuration.
+    // Returns: some View.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 4) {
             configuration.icon
@@ -280,11 +298,19 @@ struct FooterLabelStyle: LabelStyle {
     }
 }
 
-// NSVisualEffectView wrapper for that native macOS blur
+
+// Purpose: UI component that renders state and user interactions.
+// Responsibilities: Encapsulates effect view behavior for this feature area.
+// Usage: Start here to understand how this file contributes to app-level flow.
 struct EffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material
     var blendingMode: NSVisualEffectView.BlendingMode
 
+
+    // Purpose: Implements the make nsview operation for this feature.
+    // Parameters: context.
+    // Returns: NSVisualEffectView.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
@@ -293,6 +319,11 @@ struct EffectView: NSViewRepresentable {
         return view
     }
 
+
+    // Purpose: Updates nsview based on current inputs.
+    // Parameters: nsView, context.
+    // Returns: Void unless returned explicitly.
+    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode

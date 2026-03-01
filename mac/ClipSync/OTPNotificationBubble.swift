@@ -45,9 +45,7 @@ struct OTPNotificationBubble: View {
                 .foregroundColor(.white.opacity(0.9))
                 .shimmering(
                     active: isShimmerActive,
-                    duration: 3.5,
-                    bounce: false,
-                    delay: 0
+                    animation: .linear(duration: 3.5).delay(0).repeatForever(autoreverses: false)
                 )
         }
         .padding(16)

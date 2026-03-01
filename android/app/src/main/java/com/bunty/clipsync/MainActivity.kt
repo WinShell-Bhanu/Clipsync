@@ -55,10 +55,20 @@ class MainActivity : ComponentActivity() {
         val isPaired = DeviceManager.isPaired(this)
         val startDestination = if (isPaired) "homescreen" else "landing"
 
+        // Register FCM token (if paired)
+        if (isPaired) {
+            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                FCMTokenManager.registerFCMToken(this@MainActivity)
+            }
+        }
+
+        val showUpdateDialog = intent.getBooleanExtra("show_update_dialog", false)
+
         setContent {
             MaterialTheme {
                 ClipSyncNavigation(
-                    startDestination = startDestination
+                    startDestination = startDestination,
+                    showUpdateDialogOnStart = showUpdateDialog
                 )
             }
         }
@@ -83,7 +93,7 @@ class MainActivity : ComponentActivity() {
  * @param startDestination The initial route to navigate to ("landing" or "homescreen").
  */
 @Composable
-fun ClipSyncNavigation(startDestination: String) {
+fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolean = false) {
     val navController = rememberNavController()
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -249,6 +259,7 @@ fun ClipSyncNavigation(startDestination: String) {
             // ── Main settings / homescreen ─────────────────────────────────
             composable("homescreen") {
                 Homescreen(
+                    showUpdateDialogOnStart = showUpdateDialogOnStart,
                     onRepairClick = {
                         // Clear pairing and restart the QR scan with the camera active immediately
                         DeviceManager.clearPairing(navController.context)

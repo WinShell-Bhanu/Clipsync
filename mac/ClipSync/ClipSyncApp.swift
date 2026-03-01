@@ -3,9 +3,11 @@
 
 import SwiftUI
 import FirebaseCore
+import FirebaseMessaging
 import AppKit
 import Combine
 import IOKit.pwr_mgt
+import UserNotifications
 
 @main
 
@@ -254,7 +256,7 @@ public struct ObserveInjection {
 // Purpose: Class that models app delegate behavior in this module.
 // Responsibilities: Encapsulates app delegate behavior for this feature area.
 // Usage: Start here to understand how this file contributes to app-level flow.
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate, OTPNotificationDelegate {
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var cancellables = Set<AnyCancellable>()
@@ -267,6 +269,23 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationDidFinishLaunching(_ notification: Notification) {
 
+        // Set FCM delegate
+        Messaging.messaging().delegate = self
+        
+        // Set notification center delegate
+        UNUserNotificationCenter.current().delegate = self
+        
+        // Request notification permissions
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
+            if granted {
+                print("✅ Notification permission granted")
+            } else {
+                print("❌ Notification permission denied: \(String(describing: error))")
+            }
+        }
+        
+        // Register for remote notifications
+        NSApplication.shared.registerForRemoteNotifications()
 
         let pop = NSPopover()
         pop.contentSize = NSSize(width: 280, height: 400)
@@ -418,4 +437,86 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             IOPMAssertionRelease(assertionID)
         }
     }
+    
+    
+    // MARK: - MessagingDelegate
+    
+    // Purpose: Called when FCM token is refreshed.
+    // Parameters: messaging, fcmToken.
+    // Returns: Void unless returned explicitly.
+    // Notes: Stores token in Firestore for manual notification sending.
+    func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard let token = fcmToken else { return }
+        print("✅ FCM Token received")
+        
+        // Store token in Firestore
+        Task {
+            await FCMTokenManager.shared.storeFCMToken(token: token)
+        }
+        
+        // Subscribe to topic so console can target all devices at once
+        Messaging.messaging().subscribe(toTopic: "all_devices") { error in
+            if let error = error {
+                print("❌ Failed to subscribe to all_devices topic: \(error)")
+            } else {
+                print("✅ Subscribed to all_devices topic")
+            }
+        }
+    }
+    
+    
+    // MARK: - UNUserNotificationCenterDelegate
+    
+    // Purpose: Called when notification is received while app is in foreground.
+    // Parameters: center, notification, completionHandler.
+    // Returns: Void unless returned explicitly.
+    // Notes: Shows notification even when app is open.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
+        // Show notification even when app is in foreground
+        completionHandler([.banner, .sound, .badge])
+    }
+    
+    
+    // Purpose: Called when user taps on a notification.
+    // Parameters: center, response, completionHandler.
+    // Returns: Void unless returned explicitly.
+    // Notes: Opens app and shows update dialog.
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
+        let userInfo = response.notification.request.content.userInfo
+        
+        // Check if this is an update notification
+        if let type = userInfo["type"] as? String, type == "update" {
+            let version = userInfo["version"] as? String ?? "Unknown"
+            let downloadUrl = userInfo["downloadUrl"] as? String ?? ""
+            let releaseNotes = userInfo["releaseNotes"] as? String ?? "New update available!"
+            
+            // Save pending update for dialog
+            UpdateNotificationManager.shared.savePendingUpdate(
+                version: version,
+                downloadUrl: downloadUrl,
+                releaseNotes: releaseNotes
+            )
+            
+            // Notify observers to show dialog
+            NotificationCenter.default.post(name: .showUpdateDialog, object: nil)
+        }
+        
+        completionHandler()
+    }
+}
+
+
+// Purpose: Notification name for update dialog trigger.
+// Responsibilities: Used to communicate between AppDelegate and SwiftUI views.
+// Usage: Post when notification is tapped, observe in HomeScreen.
+extension Notification.Name {
+    static let showUpdateDialog = Notification.Name("showUpdateDialog")
 }

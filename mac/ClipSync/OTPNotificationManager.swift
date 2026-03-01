@@ -6,6 +6,14 @@ import FirebaseFirestore
 import AppKit
 import Combine
 import CryptoKit
+import UserNotifications
+
+// Purpose: Protocol for OTP notification delegate
+// Responsibilities: Defines required properties for OTP notification handling
+// Usage: Implemented by AppDelegate to provide status item reference
+protocol OTPNotificationDelegate: AnyObject {
+    var statusItem: NSStatusItem? { get }
+}
 
 
 // Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
@@ -19,7 +27,7 @@ class OTPNotificationManager: ObservableObject {
     private var lastOTPTime: Date?
 
 
-    weak var delegate: AppDelegate?
+    weak var delegate: OTPNotificationDelegate?
 
 
     private var currentBubbleWindow: OTPBubbleWindow?
@@ -193,12 +201,20 @@ class OTPNotificationManager: ObservableObject {
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func showNotification(otpCode: String) {
-        let notification = NSUserNotification()
-        notification.title = "OTP Copied"
-        notification.informativeText = "Code \(otpCode) copied from Android"
-        notification.soundName = NSUserNotificationDefaultSoundName
-
-        NSUserNotificationCenter.default.deliver(notification)
+        let center = UNUserNotificationCenter.current()
+        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "OTP Copied"
+            content.body = "Code \(otpCode) copied from Android"
+            content.sound = .default
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            center.add(request)
+        }
     }
 
 

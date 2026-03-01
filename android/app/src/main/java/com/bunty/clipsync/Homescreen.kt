@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.Computer
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
@@ -71,6 +72,7 @@ import com.bunty.clipsync.R
 // Returns: Unit unless returned explicitly.
 // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun Homescreen(
+    showUpdateDialogOnStart: Boolean = false,
     onRepairClick: () -> Unit = {},
     onResetPairing: () -> Unit = {}
 ) {
@@ -111,10 +113,8 @@ fun Homescreen(
 
     var isNotificationListenerEnabled by remember { mutableStateOf(false) }
 
-
-    var updateInfo by remember { mutableStateOf<UpdateChecker.UpdateInfo?>(null) }
-
-    var showUpdateDialog by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(showUpdateDialogOnStart) }
+    var updateInfo by remember { mutableStateOf<UpdateNotificationManager.UpdateInfo?>(null) }
 
     var showResetDialog by remember { mutableStateOf(false) }
     val currentVersion = "1.0.0"
@@ -162,41 +162,53 @@ fun Homescreen(
         showContent = true
         checkPermissions()
 
-        scope.launch {
-            val info = UpdateChecker.checkForUpdates("v$currentVersion")
-            if (info != null) {
-                updateInfo = info
-                showUpdateDialog = true
-            }
+        // Check for pending update
+        val pending = UpdateNotificationManager.getPendingUpdate(context)
+        if (pending != null) {
+            updateInfo = pending
+            showUpdateDialog = true
         }
     }
 
 
+    // Update Dialog
     if (showUpdateDialog && updateInfo != null) {
         AlertDialog(
-            onDismissRequest = { showUpdateDialog = false },
-            title = { Text(text = "Update Available ") },
+            onDismissRequest = { 
+                showUpdateDialog = false
+                UpdateNotificationManager.clearPendingUpdate(context)
+            },
+            title = { Text(text = "Update Available 🚀") },
             text = {
                 Column {
-                    Text("A new version (${updateInfo!!.version}) is available!")
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("Safe to update? Yes. It's from your own repo.")
+                    Text("Version ${updateInfo!!.version} is now available!")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        text = updateInfo!!.releaseNotes,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             },
             confirmButton = {
-
                 TextButton(
                     onClick = {
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
                         context.startActivity(intent)
                         showUpdateDialog = false
+                        UpdateNotificationManager.clearPendingUpdate(context)
                     }
                 ) {
                     Text("Download")
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showUpdateDialog = false }) {
+                TextButton(
+                    onClick = { 
+                        showUpdateDialog = false
+                        UpdateNotificationManager.clearPendingUpdate(context)
+                    }
+                ) {
                     Text("Later")
                 }
             }

@@ -102,6 +102,11 @@ fun ConnectionPage(
         showSubtitle = true   // show the device name subtitle after the title finishes
         delay(100)
         isPlayingLottie = true // start the Lottie sync animation
+
+        // Register FCM token after successful pairing
+        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            FCMTokenManager.registerFCMToken(context)
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {

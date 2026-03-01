@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */; };
+		BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */; };
 		BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */ = {isa = PBXBuildFile; productRef = BFE62CD52F34AF70009DE3D3 /* Shimmer */; };
 		BFF698172EFD43C60037416F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF94DD432EF29B7F0034A1B9 /* Security.framework */; };
 		BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6981E2EFD6C6B0037416F /* FirebaseCore */; };
@@ -37,6 +38,7 @@
 			files = (
 				BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */,
 				BFF698172EFD43C60037416F /* Security.framework in Frameworks */,
+				BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */,
 				BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */,
 				BFF6982C2EFD70300037416F /* Lottie in Frameworks */,
 				BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */,
@@ -98,6 +100,7 @@
 				BFF698222EFD6C6B0037416F /* FirebaseFirestore */,
 				BFF6982B2EFD70300037416F /* Lottie */,
 				BFE62CD52F34AF70009DE3D3 /* Shimmer */,
+				BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */,
 			);
 			productName = ClipSync;
 			productReference = BF1CFB822E887C7500B7A454 /* ClipSync.app */;
@@ -438,6 +441,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseMessaging;
+		};
 		BFE62CD52F34AF70009DE3D3 /* Shimmer */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */;

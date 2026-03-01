@@ -10,7 +10,6 @@ import Lottie
 struct HomeScreen: View {
     @StateObject private var clipboardManager = ClipboardManager.shared
     @StateObject private var pairingManager = PairingManager.shared
-    @ObservedObject private var updateChecker = UpdateChecker.shared
 
     @AppStorage("syncToMac") private var syncToMac = true
     @AppStorage("syncFromMac") private var syncFromMac = true
@@ -24,6 +23,9 @@ struct HomeScreen: View {
     @State private var contentOpacity: Double = 0
     @State private var contentOffset: CGFloat = 20
     @State private var tickID = UUID()
+    
+    @State private var showUpdateAlert = false
+    @State private var updateInfo: UpdateNotificationManager.UpdateInfo? = nil
 
     #if DEBUG
     @ObserveInjection var forceRedraw
@@ -304,7 +306,6 @@ struct HomeScreen: View {
         .ignoresSafeArea()
         .onAppear {
             tickID = UUID()
-            updateChecker.checkForUpdates()
             if !clipboardManager.isSyncPaused {
                 clipboardManager.startMonitoring()
                 clipboardManager.listenForAndroidClipboard()
@@ -313,17 +314,34 @@ struct HomeScreen: View {
                 contentOpacity = 1
                 contentOffset = 0
             }
+            
+            // Check for pending update
+            if let pending = UpdateNotificationManager.shared.getPendingUpdate() {
+                updateInfo = pending
+                showUpdateAlert = true
+            }
         }
-        .alert(isPresented: $updateChecker.updateAvailable) {
+        .onReceive(NotificationCenter.default.publisher(for: .showUpdateDialog)) { _ in
+            // Handle notification tap - show update dialog
+            if let pending = UpdateNotificationManager.shared.getPendingUpdate() {
+                updateInfo = pending
+                showUpdateAlert = true
+            }
+        }
+        .alert(isPresented: $showUpdateAlert) {
             Alert(
-                title: Text("Update Available "),
-                message: Text("A new version (\(updateChecker.latestVersion)) is available!"),
+                title: Text("Update Available 🚀"),
+                message: Text("Version \(updateInfo?.version ?? "Unknown") is now available!\n\n\(updateInfo?.releaseNotes ?? "")"),
                 primaryButton: .default(Text("Download")) {
-                    if let url = updateChecker.downloadURL {
+                    if let urlString = updateInfo?.downloadUrl,
+                       let url = URL(string: urlString) {
                         NSWorkspace.shared.open(url)
                     }
+                    UpdateNotificationManager.shared.clearPendingUpdate()
                 },
-                secondaryButton: .cancel()
+                secondaryButton: .cancel(Text("Later")) {
+                    UpdateNotificationManager.shared.clearPendingUpdate()
+                }
             )
         }
         .enableInjection()

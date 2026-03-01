@@ -367,9 +367,21 @@ struct FinalScreen: View {
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func requestNotificationPermission() {
-        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+        UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
-                withAnimation { isNotificationsGranted = granted }
+                if settings.authorizationStatus == .notDetermined {
+                    // First time — show the system permission dialog
+                    UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, _ in
+                        DispatchQueue.main.async {
+                            withAnimation { isNotificationsGranted = granted }
+                            if !granted { notificationIntent = false }
+                        }
+                    }
+                } else {
+                    // Already denied or restricted — open Settings so user can enable manually
+                    openNotificationSettings()
+                    notificationIntent = false
+                }
             }
         }
     }
@@ -392,8 +404,7 @@ struct FinalScreen: View {
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func openNotificationSettings() {
-        let urlString = "x-apple.systempreferences:com.apple.preference.notifications"
-        if let url = URL(string: urlString) {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
             NSWorkspace.shared.open(url)
         }
     }

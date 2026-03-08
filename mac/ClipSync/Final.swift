@@ -341,13 +341,23 @@ struct FinalScreen: View {
     /// Triggers the AX permission dialog then deep-links into System Settings > Privacy > Accessibility.
     private func requestAccessibilityPermission() {
         if isAccessibilityGranted {
+            // Already granted — just open settings to show status
             openSystemSettings()
         } else {
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true]
-            AXIsProcessTrustedWithOptions(options as CFDictionary)
+            // Call AXIsProcessTrustedWithOptions with the prompt flag.
+            // This registers the app in the TCC database so it appears in the
+            // Accessibility list, AND shows the system alert on first run.
+            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+            let alreadyInTCC = AXIsProcessTrustedWithOptions(options)
 
+            if alreadyInTCC {
+                // App is trusted — polling will pick this up
+                return
+            }
 
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+            // Give macOS ~1.5 s to register the app in TCC before opening
+            // Settings. If we open too fast the app isn't in the list yet.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
                 self.openSystemSettings()
             }
         }

@@ -1,477 +1,479 @@
 // !$*UTF8*$!
 {
-	archiveVersion = 1;
-	classes = {
-	};
-	objectVersion = 77;
-	objects = {
+    archiveVersion = 1;
+    classes = {
+    };
+    objectVersion = 77;
+    objects = {
 
 /* Begin PBXBuildFile section */
-		BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */; };
-		BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */; };
-		BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */ = {isa = PBXBuildFile; productRef = BFE62CD52F34AF70009DE3D3 /* Shimmer */; };
-		BFF698172EFD43C60037416F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF94DD432EF29B7F0034A1B9 /* Security.framework */; };
-		BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6981E2EFD6C6B0037416F /* FirebaseCore */; };
-		BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = BFF698202EFD6C6B0037416F /* FirebaseDatabase */; };
-		BFF698232EFD6C6B0037416F /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF698222EFD6C6B0037416F /* FirebaseFirestore */; };
-		BFF6982C2EFD70300037416F /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6982B2EFD70300037416F /* Lottie */; };
+        BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */; };
+        BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */; };
+        BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */ = {isa = PBXBuildFile; productRef = BFE62CD52F34AF70009DE3D3 /* Shimmer */; };
+        BFF698172EFD43C60037416F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF94DD432EF29B7F0034A1B9 /* Security.framework */; };
+        BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6981E2EFD6C6B0037416F /* FirebaseCore */; };
+        BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */ = {isa = PBXBuildFile; productRef = BFF698202EFD6C6B0037416F /* FirebaseDatabase */; };
+        BFF698232EFD6C6B0037416F /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = BFF698222EFD6C6B0037416F /* FirebaseFirestore */; };
+        BFF6982C2EFD70300037416F /* Lottie in Frameworks */ = {isa = PBXBuildFile; productRef = BFF6982B2EFD70300037416F /* Lottie */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
-		BF1CFB822E887C7500B7A454 /* ClipSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClipSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		BF94DD432EF29B7F0034A1B9 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
+        BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
+        BF1CFB822E887C7500B7A454 /* ClipSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClipSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
+        BF94DD432EF29B7F0034A1B9 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		BF1CFB842E887C7500B7A454 /* ClipSync */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = ClipSync;
-			sourceTree = "<group>";
-		};
+        BF1CFB842E887C7500B7A454 /* ClipSync */ = {
+            isa = PBXFileSystemSynchronizedRootGroup;
+            path = ClipSync;
+            sourceTree = "<group>";
+        };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		BF1CFB7F2E887C7500B7A454 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */,
-				BFF698172EFD43C60037416F /* Security.framework in Frameworks */,
-				BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */,
-				BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */,
-				BFF6982C2EFD70300037416F /* Lottie in Frameworks */,
-				BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */,
-				BFF698232EFD6C6B0037416F /* FirebaseFirestore in Frameworks */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+        BF1CFB7F2E887C7500B7A454 /* Frameworks */ = {
+            isa = PBXFrameworksBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */,
+                BFF698172EFD43C60037416F /* Security.framework in Frameworks */,
+                BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */,
+                BFF6981F2EFD6C6B0037416F /* FirebaseCore in Frameworks */,
+                BFF6982C2EFD70300037416F /* Lottie in Frameworks */,
+                BFF698212EFD6C6B0037416F /* FirebaseDatabase in Frameworks */,
+                BFF698232EFD6C6B0037416F /* FirebaseFirestore in Frameworks */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		BF1CFB792E887C7500B7A454 = {
-			isa = PBXGroup;
-			children = (
-				BF1CFB842E887C7500B7A454 /* ClipSync */,
-				BF1CFB832E887C7500B7A454 /* Products */,
-				BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */,
-				BF94DD422EF29B7F0034A1B9 /* Frameworks */,
-			);
-			sourceTree = "<group>";
-		};
-		BF1CFB832E887C7500B7A454 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				BF1CFB822E887C7500B7A454 /* ClipSync.app */,
-			);
-			name = Products;
-			sourceTree = "<group>";
-		};
-		BF94DD422EF29B7F0034A1B9 /* Frameworks */ = {
-			isa = PBXGroup;
-			children = (
-				BF94DD432EF29B7F0034A1B9 /* Security.framework */,
-			);
-			name = Frameworks;
-			sourceTree = "<group>";
-		};
+        BF1CFB792E887C7500B7A454 = {
+            isa = PBXGroup;
+            children = (
+                BF1CFB842E887C7500B7A454 /* ClipSync */,
+                BF1CFB832E887C7500B7A454 /* Products */,
+                BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */,
+                BF94DD422EF29B7F0034A1B9 /* Frameworks */,
+            );
+            sourceTree = "<group>";
+        };
+        BF1CFB832E887C7500B7A454 /* Products */ = {
+            isa = PBXGroup;
+            children = (
+                BF1CFB822E887C7500B7A454 /* ClipSync.app */,
+            );
+            name = Products;
+            sourceTree = "<group>";
+        };
+        BF94DD422EF29B7F0034A1B9 /* Frameworks */ = {
+            isa = PBXGroup;
+            children = (
+                BF94DD432EF29B7F0034A1B9 /* Security.framework */,
+            );
+            name = Frameworks;
+            sourceTree = "<group>";
+        };
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
-		BF1CFB812E887C7500B7A454 /* ClipSync */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = BF1CFB8D2E887C7700B7A454 /* Build configuration list for PBXNativeTarget "ClipSync" */;
-			buildPhases = (
-				BF1CFB7E2E887C7500B7A454 /* Sources */,
-				BF1CFB7F2E887C7500B7A454 /* Frameworks */,
-				BF1CFB802E887C7500B7A454 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-			);
-			fileSystemSynchronizedGroups = (
-				BF1CFB842E887C7500B7A454 /* ClipSync */,
-			);
-			name = ClipSync;
-			packageProductDependencies = (
-				BFF6981E2EFD6C6B0037416F /* FirebaseCore */,
-				BFF698202EFD6C6B0037416F /* FirebaseDatabase */,
-				BFF698222EFD6C6B0037416F /* FirebaseFirestore */,
-				BFF6982B2EFD70300037416F /* Lottie */,
-				BFE62CD52F34AF70009DE3D3 /* Shimmer */,
-				BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */,
-			);
-			productName = ClipSync;
-			productReference = BF1CFB822E887C7500B7A454 /* ClipSync.app */;
-			productType = "com.apple.product-type.application";
-		};
+        BF1CFB812E887C7500B7A454 /* ClipSync */ = {
+            isa = PBXNativeTarget;
+            buildConfigurationList = BF1CFB8D2E887C7700B7A454 /* Build configuration list for PBXNativeTarget "ClipSync" */;
+            buildPhases = (
+                BF1CFB7E2E887C7500B7A454 /* Sources */,
+                BF1CFB7F2E887C7500B7A454 /* Frameworks */,
+                BF1CFB802E887C7500B7A454 /* Resources */,
+            );
+            buildRules = (
+            );
+            dependencies = (
+            );
+            fileSystemSynchronizedGroups = (
+                BF1CFB842E887C7500B7A454 /* ClipSync */,
+            );
+            name = ClipSync;
+            packageProductDependencies = (
+                BFF6981E2EFD6C6B0037416F /* FirebaseCore */,
+                BFF698202EFD6C6B0037416F /* FirebaseDatabase */,
+                BFF698222EFD6C6B0037416F /* FirebaseFirestore */,
+                BFF6982B2EFD70300037416F /* Lottie */,
+                BFE62CD52F34AF70009DE3D3 /* Shimmer */,
+                BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */,
+            );
+            productName = ClipSync;
+            productReference = BF1CFB822E887C7500B7A454 /* ClipSync.app */;
+            productType = "com.apple.product-type.application";
+        };
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
-		BF1CFB7A2E887C7500B7A454 /* Project object */ = {
-			isa = PBXProject;
-			attributes = {
-				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
-				LastUpgradeCheck = 2610;
-				TargetAttributes = {
-					BF1CFB812E887C7500B7A454 = {
-						CreatedOnToolsVersion = 26.0;
-					};
-				};
-			};
-			buildConfigurationList = BF1CFB7D2E887C7500B7A454 /* Build configuration list for PBXProject "ClipSync" */;
-			developmentRegion = en;
-			hasScannedForEncodings = 0;
-			knownRegions = (
-				en,
-				Base,
-			);
-			mainGroup = BF1CFB792E887C7500B7A454;
-			minimizedProjectReferenceProxies = 1;
-			packageReferences = (
-				BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
-				BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */,
-				BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */,
-			);
-			preferredProjectObjectVersion = 77;
-			productRefGroup = BF1CFB832E887C7500B7A454 /* Products */;
-			projectDirPath = "";
-			projectRoot = "";
-			targets = (
-				BF1CFB812E887C7500B7A454 /* ClipSync */,
-			);
-		};
+        BF1CFB7A2E887C7500B7A454 /* Project object */ = {
+            isa = PBXProject;
+            attributes = {
+                BuildIndependentTargetsInParallel = 1;
+                LastSwiftUpdateCheck = 2600;
+                LastUpgradeCheck = 2610;
+                TargetAttributes = {
+                    BF1CFB812E887C7500B7A454 = {
+                        CreatedOnToolsVersion = 26.0;
+                    };
+                };
+            };
+            buildConfigurationList = BF1CFB7D2E887C7500B7A454 /* Build configuration list for PBXProject "ClipSync" */;
+            developmentRegion = en;
+            hasScannedForEncodings = 0;
+            knownRegions = (
+                en,
+                Base,
+            );
+            mainGroup = BF1CFB792E887C7500B7A454;
+            minimizedProjectReferenceProxies = 1;
+            packageReferences = (
+                BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+                BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */,
+                BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */,
+            );
+            preferredProjectObjectVersion = 77;
+            productRefGroup = BF1CFB832E887C7500B7A454 /* Products */;
+            projectDirPath = "";
+            projectRoot = "";
+            targets = (
+                BF1CFB812E887C7500B7A454 /* ClipSync */,
+            );
+        };
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
-		BF1CFB802E887C7500B7A454 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-				BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */,
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+        BF1CFB802E887C7500B7A454 /* Resources */ = {
+            isa = PBXResourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+                BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */,
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		BF1CFB7E2E887C7500B7A454 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
+        BF1CFB7E2E887C7500B7A454 /* Sources */ = {
+            isa = PBXSourcesBuildPhase;
+            buildActionMask = 2147483647;
+            files = (
+            );
+            runOnlyForDeploymentPostprocessing = 0;
+        };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		BF1CFB8B2E887C7700B7A454 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = dwarf;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_TESTABILITY = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_DYNAMIC_NO_PIC = NO;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_OPTIMIZATION_LEVEL = 0;
-				GCC_PREPROCESSOR_DEFINITIONS = (
-					"DEBUG=1",
-					"$(inherited)",
-				);
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
-				MTL_FAST_MATH = YES;
-				ONLY_ACTIVE_ARCH = YES;
-				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
-				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
-			};
-			name = Debug;
-		};
-		BF1CFB8C2E887C7700B7A454 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ALWAYS_SEARCH_USER_PATHS = NO;
-				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
-				CLANG_ANALYZER_NONNULL = YES;
-				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
-				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
-				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
-				CLANG_ENABLE_OBJC_WEAK = YES;
-				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
-				CLANG_WARN_BOOL_CONVERSION = YES;
-				CLANG_WARN_COMMA = YES;
-				CLANG_WARN_CONSTANT_CONVERSION = YES;
-				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
-				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
-				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
-				CLANG_WARN_EMPTY_BODY = YES;
-				CLANG_WARN_ENUM_CONVERSION = YES;
-				CLANG_WARN_INFINITE_RECURSION = YES;
-				CLANG_WARN_INT_CONVERSION = YES;
-				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
-				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
-				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
-				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
-				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
-				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
-				CLANG_WARN_STRICT_PROTOTYPES = YES;
-				CLANG_WARN_SUSPICIOUS_MOVE = YES;
-				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
-				CLANG_WARN_UNREACHABLE_CODE = YES;
-				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
-				COPY_PHASE_STRIP = NO;
-				DEAD_CODE_STRIPPING = YES;
-				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				ENABLE_NS_ASSERTIONS = NO;
-				ENABLE_STRICT_OBJC_MSGSEND = YES;
-				ENABLE_USER_SCRIPT_SANDBOXING = YES;
-				GCC_C_LANGUAGE_STANDARD = gnu17;
-				GCC_NO_COMMON_BLOCKS = YES;
-				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
-				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
-				GCC_WARN_UNDECLARED_SELECTOR = YES;
-				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
-				GCC_WARN_UNUSED_FUNCTION = YES;
-				GCC_WARN_UNUSED_VARIABLE = YES;
-				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
-				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MTL_ENABLE_DEBUG_INFO = NO;
-				MTL_FAST_MATH = YES;
-				SDKROOT = macosx;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_COMPILATION_MODE = wholemodule;
-			};
-			name = Release;
-		};
-		BF1CFB8E2E887C7700B7A454 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_ENTITLEMENTS = ClipSync/ClipSync.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
-				CODE_SIGN_STYLE = Manual;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
-				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
-				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.0.0;
-				OTHER_LDFLAGS = (
-					"-Xlinker",
-					"-interposable",
-				);
-				PRODUCT_BUNDLE_IDENTIFIER = com.OP.ClipSync;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				REGISTER_APP_GROUPS = YES;
-				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
-				RUNTIME_EXCEPTION_ALLOW_JIT = YES;
-				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
-				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Debug;
-		};
-		BF1CFB8F2E887C7700B7A454 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
-				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
-				AUTOMATION_APPLE_EVENTS = NO;
-				CODE_SIGN_ENTITLEMENTS = ClipSync/ClipSync.entitlements;
-				CODE_SIGN_IDENTITY = "Apple Development";
-				"CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
-				CODE_SIGN_STYLE = Manual;
-				COMBINE_HIDPI_IMAGES = YES;
-				CURRENT_PROJECT_VERSION = 1;
-				DEAD_CODE_STRIPPING = YES;
-				DEVELOPMENT_TEAM = "";
-				ENABLE_APP_SANDBOX = YES;
-				ENABLE_HARDENED_RUNTIME = YES;
-				ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
-				ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
-				ENABLE_PREVIEWS = YES;
-				ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
-				ENABLE_USER_SELECTED_FILES = readwrite;
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSHumanReadableCopyright = "";
-				LD_RUNPATH_SEARCH_PATHS = (
-					"$(inherited)",
-					"@executable_path/../Frameworks",
-				);
-				MACOSX_DEPLOYMENT_TARGET = 14.6;
-				MARKETING_VERSION = 1.0.0;
-				OTHER_LDFLAGS = "";
-				PRODUCT_BUNDLE_IDENTIFIER = com.OP.ClipSync;
-				PRODUCT_NAME = "$(TARGET_NAME)";
-				PROVISIONING_PROFILE_SPECIFIER = "";
-				REGISTER_APP_GROUPS = YES;
-				RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
-				RUNTIME_EXCEPTION_ALLOW_JIT = YES;
-				RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
-				RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
-				RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
-				RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
-				STRING_CATALOG_GENERATE_SYMBOLS = YES;
-				SWIFT_APPROACHABLE_CONCURRENCY = YES;
-				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
-				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
-				SWIFT_VERSION = 5.0;
-			};
-			name = Release;
-		};
+        BF1CFB8B2E887C7700B7A454 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ALWAYS_SEARCH_USER_PATHS = NO;
+                ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+                CLANG_ANALYZER_NONNULL = YES;
+                CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+                CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+                CLANG_ENABLE_MODULES = YES;
+                CLANG_ENABLE_OBJC_ARC = YES;
+                CLANG_ENABLE_OBJC_WEAK = YES;
+                CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+                CLANG_WARN_BOOL_CONVERSION = YES;
+                CLANG_WARN_COMMA = YES;
+                CLANG_WARN_CONSTANT_CONVERSION = YES;
+                CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+                CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+                CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+                CLANG_WARN_EMPTY_BODY = YES;
+                CLANG_WARN_ENUM_CONVERSION = YES;
+                CLANG_WARN_INFINITE_RECURSION = YES;
+                CLANG_WARN_INT_CONVERSION = YES;
+                CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+                CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+                CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+                CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+                CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+                CLANG_WARN_STRICT_PROTOTYPES = YES;
+                CLANG_WARN_SUSPICIOUS_MOVE = YES;
+                CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+                CLANG_WARN_UNREACHABLE_CODE = YES;
+                CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+                COPY_PHASE_STRIP = NO;
+                DEAD_CODE_STRIPPING = YES;
+                DEBUG_INFORMATION_FORMAT = dwarf;
+                ENABLE_STRICT_OBJC_MSGSEND = YES;
+                ENABLE_TESTABILITY = YES;
+                ENABLE_USER_SCRIPT_SANDBOXING = YES;
+                GCC_C_LANGUAGE_STANDARD = gnu17;
+                GCC_DYNAMIC_NO_PIC = NO;
+                GCC_NO_COMMON_BLOCKS = YES;
+                GCC_OPTIMIZATION_LEVEL = 0;
+                GCC_PREPROCESSOR_DEFINITIONS = (
+                    "DEBUG=1",
+                    "$(inherited)",
+                );
+                GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+                GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+                GCC_WARN_UNDECLARED_SELECTOR = YES;
+                GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+                GCC_WARN_UNUSED_FUNCTION = YES;
+                GCC_WARN_UNUSED_VARIABLE = YES;
+                LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+                MACOSX_DEPLOYMENT_TARGET = 26.0;
+                MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+                MTL_FAST_MATH = YES;
+                ONLY_ACTIVE_ARCH = YES;
+                SDKROOT = macosx;
+                STRING_CATALOG_GENERATE_SYMBOLS = YES;
+                SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+                SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+            };
+            name = Debug;
+        };
+        BF1CFB8C2E887C7700B7A454 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ALWAYS_SEARCH_USER_PATHS = NO;
+                ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+                CLANG_ANALYZER_NONNULL = YES;
+                CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+                CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+                CLANG_ENABLE_MODULES = YES;
+                CLANG_ENABLE_OBJC_ARC = YES;
+                CLANG_ENABLE_OBJC_WEAK = YES;
+                CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+                CLANG_WARN_BOOL_CONVERSION = YES;
+                CLANG_WARN_COMMA = YES;
+                CLANG_WARN_CONSTANT_CONVERSION = YES;
+                CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+                CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+                CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+                CLANG_WARN_EMPTY_BODY = YES;
+                CLANG_WARN_ENUM_CONVERSION = YES;
+                CLANG_WARN_INFINITE_RECURSION = YES;
+                CLANG_WARN_INT_CONVERSION = YES;
+                CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+                CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+                CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+                CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+                CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+                CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+                CLANG_WARN_STRICT_PROTOTYPES = YES;
+                CLANG_WARN_SUSPICIOUS_MOVE = YES;
+                CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+                CLANG_WARN_UNREACHABLE_CODE = YES;
+                CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+                COPY_PHASE_STRIP = NO;
+                DEAD_CODE_STRIPPING = YES;
+                DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+                ENABLE_NS_ASSERTIONS = NO;
+                ENABLE_STRICT_OBJC_MSGSEND = YES;
+                ENABLE_USER_SCRIPT_SANDBOXING = YES;
+                GCC_C_LANGUAGE_STANDARD = gnu17;
+                GCC_NO_COMMON_BLOCKS = YES;
+                GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+                GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+                GCC_WARN_UNDECLARED_SELECTOR = YES;
+                GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+                GCC_WARN_UNUSED_FUNCTION = YES;
+                GCC_WARN_UNUSED_VARIABLE = YES;
+                LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+                MACOSX_DEPLOYMENT_TARGET = 26.0;
+                MTL_ENABLE_DEBUG_INFO = NO;
+                MTL_FAST_MATH = YES;
+                SDKROOT = macosx;
+                STRING_CATALOG_GENERATE_SYMBOLS = YES;
+                SWIFT_COMPILATION_MODE = wholemodule;
+            };
+            name = Release;
+        };
+        BF1CFB8E2E887C7700B7A454 /* Debug */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+                AUTOMATION_APPLE_EVENTS = NO;
+                CODE_SIGN_ENTITLEMENTS = ClipSync/ClipSync.entitlements;
+                CODE_SIGN_IDENTITY = "Apple Development";
+                "CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+                CODE_SIGN_STYLE = Manual;
+                COMBINE_HIDPI_IMAGES = YES;
+                CURRENT_PROJECT_VERSION = 1;
+                DEAD_CODE_STRIPPING = YES;
+                DEVELOPMENT_TEAM = "";
+                ENABLE_APP_SANDBOX = YES;
+                ENABLE_HARDENED_RUNTIME = YES;
+                ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+                ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+                ENABLE_PREVIEWS = YES;
+                ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+                ENABLE_USER_SELECTED_FILES = readwrite;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSAccessibilityUsageDescription = "ClipSync needs Accessibility access to detect when you copy text so it can instantly sync to your Android device.";
+                INFOPLIST_KEY_NSHumanReadableCopyright = "";
+                LD_RUNPATH_SEARCH_PATHS = (
+                    "$(inherited)",
+                    "@executable_path/../Frameworks",
+                );
+                MACOSX_DEPLOYMENT_TARGET = 14.6;
+                MARKETING_VERSION = 1.0.0;
+                OTHER_LDFLAGS = (
+                    "-Xlinker",
+                    "-interposable",
+                );
+                PRODUCT_BUNDLE_IDENTIFIER = com.OP.ClipSync;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                PROVISIONING_PROFILE_SPECIFIER = "";
+                REGISTER_APP_GROUPS = YES;
+                RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
+                RUNTIME_EXCEPTION_ALLOW_JIT = YES;
+                RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
+                RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+                RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+                RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
+                STRING_CATALOG_GENERATE_SYMBOLS = YES;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_EMIT_LOC_STRINGS = YES;
+                SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+                SWIFT_VERSION = 5.0;
+            };
+            name = Debug;
+        };
+        BF1CFB8F2E887C7700B7A454 /* Release */ = {
+            isa = XCBuildConfiguration;
+            buildSettings = {
+                ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+                ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+                AUTOMATION_APPLE_EVENTS = NO;
+                CODE_SIGN_ENTITLEMENTS = ClipSync/ClipSync.entitlements;
+                CODE_SIGN_IDENTITY = "Apple Development";
+                "CODE_SIGN_IDENTITY[sdk=macosx*]" = "-";
+                CODE_SIGN_STYLE = Manual;
+                COMBINE_HIDPI_IMAGES = YES;
+                CURRENT_PROJECT_VERSION = 1;
+                DEAD_CODE_STRIPPING = YES;
+                DEVELOPMENT_TEAM = "";
+                ENABLE_APP_SANDBOX = YES;
+                ENABLE_HARDENED_RUNTIME = YES;
+                ENABLE_INCOMING_NETWORK_CONNECTIONS = YES;
+                ENABLE_OUTGOING_NETWORK_CONNECTIONS = YES;
+                ENABLE_PREVIEWS = YES;
+                ENABLE_RESOURCE_ACCESS_PHOTO_LIBRARY = NO;
+                ENABLE_USER_SELECTED_FILES = readwrite;
+                GENERATE_INFOPLIST_FILE = YES;
+                INFOPLIST_KEY_NSAccessibilityUsageDescription = "ClipSync needs Accessibility access to detect when you copy text so it can instantly sync to your Android device.";
+                INFOPLIST_KEY_NSHumanReadableCopyright = "";
+                LD_RUNPATH_SEARCH_PATHS = (
+                    "$(inherited)",
+                    "@executable_path/../Frameworks",
+                );
+                MACOSX_DEPLOYMENT_TARGET = 14.6;
+                MARKETING_VERSION = 1.0.0;
+                OTHER_LDFLAGS = "";
+                PRODUCT_BUNDLE_IDENTIFIER = com.OP.ClipSync;
+                PRODUCT_NAME = "$(TARGET_NAME)";
+                PROVISIONING_PROFILE_SPECIFIER = "";
+                REGISTER_APP_GROUPS = YES;
+                RUNTIME_EXCEPTION_ALLOW_DYLD_ENVIRONMENT_VARIABLES = YES;
+                RUNTIME_EXCEPTION_ALLOW_JIT = YES;
+                RUNTIME_EXCEPTION_ALLOW_UNSIGNED_EXECUTABLE_MEMORY = YES;
+                RUNTIME_EXCEPTION_DEBUGGING_TOOL = NO;
+                RUNTIME_EXCEPTION_DISABLE_EXECUTABLE_PAGE_PROTECTION = NO;
+                RUNTIME_EXCEPTION_DISABLE_LIBRARY_VALIDATION = YES;
+                STRING_CATALOG_GENERATE_SYMBOLS = YES;
+                SWIFT_APPROACHABLE_CONCURRENCY = YES;
+                SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+                SWIFT_EMIT_LOC_STRINGS = YES;
+                SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+                SWIFT_VERSION = 5.0;
+            };
+            name = Release;
+        };
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		BF1CFB7D2E887C7500B7A454 /* Build configuration list for PBXProject "ClipSync" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BF1CFB8B2E887C7700B7A454 /* Debug */,
-				BF1CFB8C2E887C7700B7A454 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		BF1CFB8D2E887C7700B7A454 /* Build configuration list for PBXNativeTarget "ClipSync" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				BF1CFB8E2E887C7700B7A454 /* Debug */,
-				BF1CFB8F2E887C7700B7A454 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
+        BF1CFB7D2E887C7500B7A454 /* Build configuration list for PBXProject "ClipSync" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                BF1CFB8B2E887C7700B7A454 /* Debug */,
+                BF1CFB8C2E887C7700B7A454 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
+        BF1CFB8D2E887C7700B7A454 /* Build configuration list for PBXNativeTarget "ClipSync" */ = {
+            isa = XCConfigurationList;
+            buildConfigurations = (
+                BF1CFB8E2E887C7700B7A454 /* Debug */,
+                BF1CFB8F2E887C7700B7A454 /* Release */,
+            );
+            defaultConfigurationIsVisible = 0;
+            defaultConfigurationName = Release;
+        };
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
-		BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/markiv/SwiftUI-Shimmer.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 1.5.1;
-			};
-		};
-		BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 12.7.0;
-			};
-		};
-		BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
-			isa = XCRemoteSwiftPackageReference;
-			repositoryURL = "https://github.com/airbnb/lottie-ios.git";
-			requirement = {
-				kind = upToNextMajorVersion;
-				minimumVersion = 4.5.2;
-			};
-		};
+        BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/markiv/SwiftUI-Shimmer.git";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 1.5.1;
+            };
+        };
+        BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/firebase/firebase-ios-sdk.git";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 12.7.0;
+            };
+        };
+        BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */ = {
+            isa = XCRemoteSwiftPackageReference;
+            repositoryURL = "https://github.com/airbnb/lottie-ios.git";
+            requirement = {
+                kind = upToNextMajorVersion;
+                minimumVersion = 4.5.2;
+            };
+        };
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
-		BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseMessaging;
-		};
-		BFE62CD52F34AF70009DE3D3 /* Shimmer */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */;
-			productName = Shimmer;
-		};
-		BFF6981E2EFD6C6B0037416F /* FirebaseCore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseCore;
-		};
-		BFF698202EFD6C6B0037416F /* FirebaseDatabase */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseDatabase;
-		};
-		BFF698222EFD6C6B0037416F /* FirebaseFirestore */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
-			productName = FirebaseFirestore;
-		};
-		BFF6982B2EFD70300037416F /* Lottie */ = {
-			isa = XCSwiftPackageProductDependency;
-			package = BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */;
-			productName = Lottie;
-		};
+        BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+            productName = FirebaseMessaging;
+        };
+        BFE62CD52F34AF70009DE3D3 /* Shimmer */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFE62CD42F34AF70009DE3D3 /* XCRemoteSwiftPackageReference "SwiftUI-Shimmer" */;
+            productName = Shimmer;
+        };
+        BFF6981E2EFD6C6B0037416F /* FirebaseCore */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+            productName = FirebaseCore;
+        };
+        BFF698202EFD6C6B0037416F /* FirebaseDatabase */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+            productName = FirebaseDatabase;
+        };
+        BFF698222EFD6C6B0037416F /* FirebaseFirestore */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFF6981B2EFD6C6B0037416F /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+            productName = FirebaseFirestore;
+        };
+        BFF6982B2EFD70300037416F /* Lottie */ = {
+            isa = XCSwiftPackageProductDependency;
+            package = BFF6982A2EFD70300037416F /* XCRemoteSwiftPackageReference "lottie-ios" */;
+            productName = Lottie;
+        };
 /* End XCSwiftPackageProductDependency section */
-	};
-	rootObject = BF1CFB7A2E887C7500B7A454 /* Project object */;
+    };
+    rootObject = BF1CFB7A2E887C7500B7A454 /* Project object */;
 }

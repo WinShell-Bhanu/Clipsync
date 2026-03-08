@@ -1,16 +1,21 @@
 
 
 
+// PairingManager.swift
+// Manages the full device pairing lifecycle: listening for a new QR-scan pairing
+// from Android, persisting state to UserDefaults, watching for remote unpairs,
+// and restoring a valid pairing on relaunch (within the same boot session).
+
 import Foundation
 import FirebaseFirestore
 import Combine
 
+// MARK: - PairingManager
 
-// Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
-// Responsibilities: Encapsulates pairing manager behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class PairingManager: ObservableObject {
     static let shared = PairingManager()
+
+    // MARK: - Published State
 
     @Published var isPaired: Bool = UserDefaults.standard.string(forKey: "current_pairing_id") != nil
     @Published var pairedDeviceName: String = UserDefaults.standard.string(forKey: "paired_device_name") ?? ""
@@ -23,11 +28,9 @@ class PairingManager: ObservableObject {
     private let db = FirebaseManager.shared.db
     private var listenStartTime: Date?
 
+    // MARK: - Pairing Listener
 
-    // Purpose: Implements the listen for pairing operation for this feature.
-    // Parameters: macDeviceId.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Begins listening for a new pairing document in Firestore that matches this Mac's device ID.
     func listenForPairing(macDeviceId: String) {
         guard !isPaired else { return }
 
@@ -38,11 +41,13 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Starts firestore listener flow and required listeners.
-    // Parameters: macDeviceId.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Creates (or replaces) the Firestore snapshot listener for pairing documents.
     private func startFirestoreListener(macDeviceId: String) {
+        // Bug fix: always tear down the previous listener before creating a new one
+        // so we never leak a dangling Firestore snapshot listener.
+        pairingListener?.remove()
+        pairingListener = nil
+
         pairingListener = db.collection("pairings")
             .whereField("macId", isEqualTo: macDeviceId)
             .addSnapshotListener { [weak self] snapshot, error in
@@ -71,10 +76,7 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the process documents operation for this feature.
-    // Parameters: documents.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Filters the snapshot documents to find a valid pairing created after listenStartTime.
     private func processDocuments(_ documents: [QueryDocumentSnapshot]) {
         var validPairing: QueryDocumentSnapshot?
 
@@ -101,10 +103,7 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the process pairing data operation for this feature.
-    // Parameters: doc.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Extracts pairing fields from a Firestore document and updates published state + UserDefaults.
     private func processPairingData(_ doc: QueryDocumentSnapshot) {
         let data = doc.data()
         guard let androidDeviceName = data["androidDeviceName"] as? String else { return }
@@ -127,10 +126,9 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Starts monitoring pairing status flow and required listeners.
-    // Parameters: pairingId.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Unpairing
+
+    /// Watches the pairing document for deletion so the Mac can react to a remote unpair from Android.
     func startMonitoringPairingStatus(pairingId: String) {
         unpairingListener?.remove()
 
@@ -147,10 +145,7 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Stops listening flow and performs cleanup.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Tears down the active pairing Firestore listener.
     func stopListening() {
         pairingListener?.remove()
         pairingListener = nil
@@ -158,34 +153,36 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Removes clear pairing data from current storage/context.
-    // Parameters: onSuccess, onFailure.
-    // Returns: Void =.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Deletes the pairing document from Firestore, then calls unpair() regardless
+    /// of whether the delete succeeded, so local state is always cleaned up.
     func clearPairing(onSuccess: @escaping () -> Void = {}, onFailure: @escaping (Error) -> Void = { _ in }) {
         guard let pairingId = self.pairingId else {
             unpair()
-            onSuccess()
+            DispatchQueue.main.async { onSuccess() }
             return
         }
 
         db.collection("pairings")
             .document(pairingId)
             .delete { [weak self] error in
-                if let error = error {
-                    onFailure(error)
-                } else {
-                    self?.unpair()
-                    onSuccess()
+                // Bug fix: always dispatch callbacks on main thread — callers set
+                // @State / navigate, which must happen on main.
+                DispatchQueue.main.async {
+                    if let error = error {
+                        // Bug fix: unpair() regardless of Firestore failure so local
+                        // state is always cleaned up — no stale paired state left behind.
+                        self?.unpair()
+                        onFailure(error)
+                    } else {
+                        self?.unpair()
+                        onSuccess()
+                    }
                 }
             }
     }
 
 
-    // Purpose: Implements the unpair operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Resets all in-memory paired state, wipes UserDefaults keys, and stops clipboard sync.
     func unpair() {
         unpairingListener?.remove()
         unpairingListener = nil
@@ -209,10 +206,10 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the restore pairing operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Launch Restoration
+
+    /// On launch, checks if the saved pairing belongs to the current boot session
+    /// (within 120 s tolerance); if not, unpairs to avoid stale state.
     func restorePairing() {
         if let savedPairingId = UserDefaults.standard.string(forKey: "current_pairing_id"),
            let savedDeviceName = UserDefaults.standard.string(forKey: "paired_device_name") {
@@ -235,10 +232,8 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the complete setup operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Marks onboarding as done and persists the current boot time so restorePairing
+    /// can verify session validity on the next launch.
     func completeSetup() {
         DispatchQueue.main.async {
             self.isSetupComplete = true
@@ -248,10 +243,7 @@ class PairingManager: ObservableObject {
     }
 
 
-    // Purpose: Returns computed or stored current boot time.
-    // Parameters: No parameters.
-    // Returns: TimeInterval.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Derives the wall-clock boot time by subtracting system uptime from the current date.
     private func getCurrentBootTime() -> TimeInterval {
         return Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
     }

@@ -32,21 +32,26 @@ import java.util.concurrent.Executors
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
 /**
- * CameraQRScanner renders a live camera preview and scans frames for QR codes
- * using Google ML Kit's Barcode API.
+ * A full-screen Composable that opens the device's back camera, streams live frames through
+ * Google ML Kit's Barcode scanning API, and invokes a callback as soon as a valid QR code is found.
  *
- * **Flow:**
- * 1. Requests `CAMERA` permission via Accompanist on first composition.
- * 2. Once granted, opens the back camera and attaches an [ImageAnalysis] use-case
- *    that processes frames one-at-a-time on a background executor.
- * 3. When a QR code is detected, the camera is unbound and a Lottie loading animation
- *    is shown for 500 ms before [onQRCodeScanned] is called.
+ * Lifecycle of a scan session:
+ *  1. On first composition the Accompanist permission helper requests CAMERA access from the user.
+ *  2. Once granted, a CameraX [ProcessCameraProvider] is obtained and two use-cases are bound to
+ *     the lifecycle: a [Preview] (live viewfinder) and an [ImageAnalysis] (background frame
+ *     processor). The analysis use-case discards all but the most recent frame so the pipeline
+ *     never builds up a backlog of unprocessed buffers.
+ *  3. Each frame is forwarded to [processImageProxy]. The first successful detection sets
+ *     [hasScanned] to `true`, stores the decoded string in [scannedQRCode], and raises [showLoading].
+ *  4. [showLoading] triggers a [LaunchedEffect] that immediately unbinds the camera to stop
+ *     frame capture, plays the Lottie loading overlay for 500 ms, then delivers the scanned
+ *     string to the caller via [onQRCodeScanned].
+ *  5. If the CAMERA permission has not been granted the composable renders nothing — the
+ *     surrounding screen is responsible for prompting the user and recomposing after grant.
  *
- * The [hasScanned] flag ensures only the first detected QR code is acted upon,
- * preventing duplicate callbacks.
- *
- * @param onQRCodeScanned Called on the main thread with the raw QR code string.
- * @param modifier        Optional [Modifier] (typically fills the parent card).
+ * @param onQRCodeScanned Invoked on the main thread once a QR code has been successfully decoded.
+ *                        Receives the raw string payload embedded in the code.
+ * @param modifier        Modifier applied to the outer [Box]; defaults to no-op.
  */
 fun CameraQRScanner(
     onQRCodeScanned: (String) -> Unit,
@@ -56,26 +61,33 @@ fun CameraQRScanner(
     val lifecycleOwner    = LocalLifecycleOwner.current
     val cameraPermission  = rememberPermissionState(Manifest.permission.CAMERA)
 
-    // Prevents processing more than one QR code per scan session
+    // Guards against processing multiple frames after the first successful decode.
+    // Once true, every subsequent frame is immediately closed without being analysed.
     var hasScanned    by remember { mutableStateOf(false) }
-    // Controls whether the loading Lottie overlay is shown instead of the camera
+    // Drives the UI switch from the live camera preview to the Lottie loading overlay.
+    // Flipped to true the moment a valid QR code is detected in any incoming frame.
     var showLoading   by remember { mutableStateOf(false) }
-    // The raw string value of the first detected QR code
+    // Holds the raw QR payload from the first successful frame analysis.
+    // Remains null until a barcode is detected; read by the LaunchedEffect to invoke the callback.
     var scannedQRCode by remember { mutableStateOf<String?>(null) }
-    // Kept so the camera can be fully unbound before navigating away
+    // Retained reference to the camera provider so the camera can be explicitly unbound
+    // before the screen exits, releasing hardware resources and preventing leaks.
     var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
 
-    // When showLoading becomes true: unbind the camera, wait 500 ms for the animation,
-    // then fire the callback so the parent screen can navigate
+    // Reacts to the showLoading flag becoming true after a successful QR scan.
+    // Tears down the camera immediately to release hardware resources, waits just long
+    // enough for the loading animation to give the user visual feedback, then fires the callback.
     LaunchedEffect(showLoading) {
         if (showLoading && scannedQRCode != null) {
-            cameraProvider?.unbindAll()  // stop camera before navigating
-            delay(500)                   // let the Lottie animation play briefly
+            cameraProvider?.unbindAll()
+            delay(500)
             onQRCodeScanned(scannedQRCode!!)
         }
     }
 
-    // Request camera permission as soon as this composable enters the composition
+    // Fires once when this composable first enters the composition.
+    // Proactively requests CAMERA permission so the system dialog appears without
+    // requiring any additional user interaction beyond what is already on screen.
     LaunchedEffect(Unit) {
         if (!cameraPermission.status.isGranted) {
             cameraPermission.launchPermissionRequest()
@@ -85,7 +97,9 @@ fun CameraQRScanner(
     Box(modifier = modifier.fillMaxSize()) {
         if (cameraPermission.status.isGranted) {
 
-            // Show camera preview only when not yet loading
+            // The live preview is shown only while still waiting for a successful scan.
+            // Once showLoading is true it is replaced by the loading overlay, making
+            // the UI transition feel instantaneous from the user's perspective.
             if (!showLoading) {
                 AndroidView(
                     factory = { ctx ->
@@ -96,26 +110,32 @@ fun CameraQRScanner(
                             val provider = ProcessCameraProvider.getInstance(ctx).get()
                             cameraProvider = provider
 
-                            // Use-case 1: live preview surface
+                            // Connects the Preview use-case to the PreviewView's Surface so the
+                            // camera stream is rendered on screen continuously in real time.
                             val preview = Preview.Builder().build().also {
                                 it.setSurfaceProvider(previewView.surfaceProvider)
                             }
 
-                            // Use-case 2: image analysis — only keep the latest frame to avoid backpressure
+                            // Configures the ImageAnalysis use-case with a drop-oldest strategy.
+                            // If the analyser is still busy when the next frame arrives, the older
+                            // frame is discarded to keep latency low on slower devices.
                             val imageAnalyzer = ImageAnalysis.Builder()
                                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                                 .build()
                                 .also {
                                     it.setAnalyzer(cameraExecutor) { imageProxy ->
                                         if (!hasScanned) {
-                                            // Process the frame; set hasScanned=true on first hit
+                                            // Pass the frame to ML Kit for analysis; the callback
+                                            // sets hasScanned so no further frames are processed.
                                             processImageProxy(imageProxy) { qrCode ->
                                                 hasScanned    = true
                                                 scannedQRCode = qrCode
                                                 showLoading   = true
                                             }
                                         } else {
-                                            imageProxy.close()  // discard frames after first scan
+                                            // A scan has already succeeded; release the frame buffer
+                                            // immediately without running any barcode analysis.
+                                            imageProxy.close()
                                         }
                                     }
                                 }
@@ -139,37 +159,43 @@ fun CameraQRScanner(
                 )
             }
 
-            // Loading overlay — shown after a QR code is detected while the camera winds down
+            // Full-screen overlay rendered once a QR code is found, displayed while the camera
+            // provider finishes unbinding in the background. The elevated zIndex ensures this
+            // layer paints over any residual camera surface still showing underneath.
             if (showLoading) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color(0xFFB1C2F6))
-                        .zIndex(10f),  // render above the camera preview
+                        .zIndex(10f),
                     contentAlignment = Alignment.Center
                 ) {
                     LottieLoadingAnimation()
                 }
             }
         }
-        // If permission is not granted the Box is empty — the parent QRScanScreen
-        // handles the "Scan QR" button and will re-compose once permission is granted.
+        // When CAMERA permission has not been granted, this Box intentionally renders nothing.
+        // The parent QRScanScreen owns the permission-rationale UI and triggers a recomposition
+        // once the user grants access so the camera preview can be initialised.
     }
 }
 
 @Composable
 /**
- * LottieLoadingAnimation plays the `Loading.lottie` asset once at 1.5× speed.
+ * Plays the bundled `Loading.lottie` animation asset as a polished visual transition between
+ * the QR scan result and the next screen while Firestore processes the pairing request.
  *
- * Used as a visual transition while the scanned QR data is being processed by Firestore.
- * Displayed on top of the camera card inside [CameraQRScanner].
+ * The animation runs exactly once at 1.5× speed, keeping the wait short while still giving
+ * the user clear feedback that the app is actively processing. Displayed centred inside the
+ * blue loading overlay that covers the camera card in [CameraQRScanner].
  */
 fun LottieLoadingAnimation() {
     val composition by rememberLottieComposition(
         LottieCompositionSpec.Asset("Loading.lottie")
     )
 
-    // Play once (iterations = 1) at 1.5× speed so it doesn't feel sluggish
+    // Drives the animation from frame 0 to the final frame exactly once.
+    // A speed value greater than 1.0 shortens the total run time so users are not left waiting.
     val progress by animateLottieCompositionAsState(
         composition  = composition,
         iterations   = 1,
@@ -186,17 +212,27 @@ fun LottieLoadingAnimation() {
 
 @androidx.annotation.OptIn(ExperimentalGetImage::class)
 /**
- * Processes a single [ImageProxy] frame from the CameraX [ImageAnalysis] use-case
- * and scans it for QR codes using ML Kit's [BarcodeScanning] client.
+ * Extracts the underlying [android.media.Image] from a CameraX [ImageProxy], converts it to an
+ * ML Kit [InputImage] (applying the device's current rotation so the scanner always sees upright
+ * content), and runs it through the [BarcodeScanning] client to detect QR codes.
  *
- * Only `TYPE_TEXT` and `TYPE_URL` barcodes are acted upon — other barcode types
- * (like product UPC codes) are ignored.
+ * Filtering: only barcodes with [Barcode.valueType] equal to [Barcode.TYPE_TEXT] or
+ * [Barcode.TYPE_URL] are forwarded to [onQRCodeDetected]. All other formats — EAN-13, Code 128,
+ * Wi-Fi QR codes, etc. — are silently skipped because ClipSync pairing QR codes always encode
+ * their JSON payload as a plain text or URL-scheme string.
  *
- * **Important:** [imageProxy] is always closed in the `addOnCompleteListener` to
- * release the frame buffer back to the camera pipeline.
+ * Resource management: [imageProxy] is unconditionally closed in `addOnCompleteListener`
+ * regardless of success or failure, releasing the frame buffer back to CameraX so the pipeline
+ * can continue delivering new frames without stalling on held references.
  *
- * @param imageProxy        The camera frame to analyse (must be closed after use).
- * @param onQRCodeDetected  Called with the raw barcode string when a match is found.
+ * If the underlying media image reference is null (an edge case on some devices when the camera
+ * is shutting down mid-frame), the proxy is closed immediately and the function returns early
+ * without attempting any barcode analysis.
+ *
+ * @param imageProxy       A single camera frame from [ImageAnalysis]. Ownership transfers to this
+ *                         function — callers must not attempt to close it themselves.
+ * @param onQRCodeDetected Invoked with the raw barcode string for each matching barcode found.
+ *                         [CameraQRScanner] gates further calls using the [hasScanned] flag.
  */
 private fun processImageProxy(
     imageProxy: ImageProxy,
@@ -206,13 +242,14 @@ private fun processImageProxy(
     if (mediaImage != null) {
         val image = InputImage.fromMediaImage(
             mediaImage,
-            imageProxy.imageInfo.rotationDegrees  // apply device rotation so ML Kit sees upright frames
+            imageProxy.imageInfo.rotationDegrees
         )
 
         BarcodeScanning.getClient().process(image)
             .addOnSuccessListener { barcodes ->
                 for (barcode in barcodes) {
-                    // Only process plain-text or URL QR codes (ClipSync QR codes are JSON text)
+                    // ClipSync QR codes always encode their JSON payload as plain text or a URL.
+                    // All other barcode formats (EAN-13, Code 128, Wi-Fi, etc.) are irrelevant.
                     if (barcode.valueType == Barcode.TYPE_TEXT ||
                         barcode.valueType == Barcode.TYPE_URL) {
                         barcode.rawValue?.let { qrCode ->
@@ -225,7 +262,9 @@ private fun processImageProxy(
                 Log.e("CameraQRScanner", "Barcode scanning failed", e)
             }
             .addOnCompleteListener {
-                imageProxy.close()  // always release the frame, even on failure
+                // Always release the frame buffer back to CameraX regardless of outcome,
+                // preventing the ImageAnalysis pipeline from stalling on unreleased references.
+                imageProxy.close()
             }
     } else {
         imageProxy.close()

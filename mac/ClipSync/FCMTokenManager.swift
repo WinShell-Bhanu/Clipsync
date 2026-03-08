@@ -1,26 +1,29 @@
+// FCMTokenManager.swift
+// Stores and removes the FCM device token in Firestore under fcmTokens/{deviceId}.
+// Used so a Cloud Function or the Firebase console can look up tokens by device
+// to send targeted push notifications.
+
 import Foundation
 import Firebase
 import FirebaseFirestore
 
-// Purpose: FCMTokenManager handles registration and storage of FCM tokens in Firestore.
-// Responsibilities: Stores and manages FCM tokens with device metadata for manual notification sending.
-// Usage: Call storeFCMToken() from AppDelegate when token is received.
+// MARK: - FCMTokenManager
+
 class FCMTokenManager {
     static let shared = FCMTokenManager()
-    
+
     private let COLLECTION_FCM_TOKENS = "fcmTokens"
-    
+
     private init() {}
-    
-    
-    // Purpose: Stores FCM token in Firestore with device metadata.
-    // Parameters: token.
-    // Returns: Async completion.
-    // Notes: Determines Firebase project ID from active Firebase app.
+
+    // MARK: - Token Management
+
+    /// Upserts the FCM token document with platform, projectId, deviceId, deviceName,
+    /// and appVersion. Uses merge so existing fields are not overwritten.
     func storeFCMToken(token: String) async {
         let deviceId = DeviceManager.shared.getDeviceId()
         let deviceName = DeviceManager.shared.getFriendlyMacName()
-        
+
         // Get projectId from active Firebase configuration
         let projectId = FirebaseApp.app()?.options.projectID ?? "clipsyncind"
         
@@ -47,10 +50,8 @@ class FCMTokenManager {
     }
     
     
-    // Purpose: Deletes FCM token from Firestore.
-    // Parameters: No parameters.
-    // Returns: Async completion.
-    // Notes: Called when user unpairs device.
+    /// Deletes the token document when the device is unpaired so stale tokens
+    /// don't accumulate in Firestore.
     func deleteFCMToken() async {
         let deviceId = DeviceManager.shared.getDeviceId()
         

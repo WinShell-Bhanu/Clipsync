@@ -9,43 +9,59 @@ import android.os.Looper
 import android.widget.Toast
 
 /**
- * EmailOTPListenerService is a [NotificationListenerService] that watches notifications
- * from known email apps and automatically extracts OTP codes from them.
+ * A [NotificationListenerService] that monitors email-app notifications for OTP codes and
+ * forwards any code it finds to the paired Mac, complementing the SMS-based [OTPListeningService].
  *
- * **Why this exists:**
- * Many services send OTPs via email rather than SMS. By listening to email-app notifications
- * (Gmail, Outlook, etc.) ClipSync can detect and sync these OTPs to the Mac without
- * requiring the user to open the email manually.
+ * Many services now deliver OTPs exclusively by email rather than SMS. Without this service,
+ * ClipSync users would need to open their email app manually and copy the code by hand.
+ * This service eliminates that friction by extracting the code the moment the email
+ * notification appears in the status bar.
  *
- * **How it works:**
- * 1. Receives `onNotificationPosted` callbacks for every notification posted on the device.
- * 2. Filters to the [EMAIL_APP_PACKAGES] allow-list.
- * 3. Concatenates all text extras (title, body, big text, sub-text) into a single string.
- * 4. Checks for OTP keywords (e.g. "verification code", "one time password").
- * 5. Extracts a 4–8 digit code and syncs it to the Mac via [OTPNotificationService].
+ * Detection pipeline:
+ *  1. [onNotificationPosted] fires for every notification posted on the device.
+ *  2. The source package name is checked against [EMAIL_APP_PACKAGES]; all others are ignored.
+ *  3. A 2-second debounce ([MIN_PROCESSING_INTERVAL]) suppresses rapid repeat notifications
+ *     from the same email thread.
+ *  4. All text extras from the notification (title, body, big-text, sub-text) are
+ *     concatenated into a single string for scanning.
+ *  5. The string is checked for [OTP_KEYWORDS] (22 languages, case-insensitive).
+ *  6. A 4–8 digit code is extracted and validated by [isValidOTP].
+ *  7. Duplicate codes are rejected by comparing against [lastProcessedOTP].
+ *  8. The unique code is written to the clipboard via [ClipboardGhostActivity] and pushed
+ *     to the Mac via [OTPNotificationService]. A Toast on the main thread confirms capture.
  *
- * A 2-second debounce ([MIN_PROCESSING_INTERVAL]) and a deduplication check against
- * [lastProcessedOTP] prevent the same OTP being processed twice.
- *
- * Requires the **Notification Listener** permission granted in Android Settings.
- * Declared in AndroidManifest.xml with the `BIND_NOTIFICATION_LISTENER_SERVICE` permission.
+ * Requires the Notification Listener permission (Android Settings > Notifications > Notification
+ * access). Declared in AndroidManifest.xml with BIND_NOTIFICATION_LISTENER_SERVICE permission.
  */
 class EmailOTPListenerService : NotificationListenerService() {
 
-    /** Handler used to post Toast messages back to the main thread from the service. */
+    /**
+     * Handler tied to the main (UI) thread. Needed because [onNotificationPosted] can be
+     * called from a binder thread, but [Toast.makeText] must run on the main thread.
+     */
     private val mainHandler = Handler(Looper.getMainLooper())
 
     companion object {
         private const val TAG = "EmailOTPListener"
 
-        // Debounce: skip notifications that arrive within 2 seconds of each other
+        // Timestamp of the last successful OTP extraction, used for the debounce check.
         private var lastProcessedTime = 0L
+        // The OTP string most recently acted upon; compared against new candidates to skip duplicates.
         private var lastProcessedOTP  = ""
+
+        /**
+         * Minimum gap in milliseconds between successive OTP extractions from email notifications.
+         * Two seconds is generous enough to absorb repeated badge-update notifications
+         * (e.g. "1 new message", "2 new messages") that arrive in quick succession for the same email.
+         */
         private const val MIN_PROCESSING_INTERVAL = 2000L
 
         /**
-         * Package names of email apps whose notifications are monitored for OTP codes.
-         * Add new email apps here if users report missing OTP detection.
+         * Allow-list of email app package names whose notifications are inspected for OTP codes.
+         *
+         * Only notifications from these packages are processed; all others are ignored to keep
+         * CPU and battery overhead to a minimum and to avoid false positives from non-email apps.
+         * Add new packages here when new email clients gain significant adoption.
          */
         private val EMAIL_APP_PACKAGES = setOf(
             "com.google.android.gm",               // Gmail
@@ -60,10 +76,19 @@ class EmailOTPListenerService : NotificationListenerService() {
         )
 
         /**
-         * Keywords that indicate a notification likely contains an OTP.
-         * Checked case-insensitively against the concatenated notification text.
+         * Multilingual keyword list used to identify notifications that carry an OTP.
+         *
+         * Applied case-insensitively against the concatenated notification text. One match
+         * is sufficient to proceed to code extraction.
+         *
+         * Covers 22 languages across English, major Indian regional languages (Hindi, Bengali,
+         * Telugu, Tamil, Gujarati, Kannada, Malayalam, Marathi, Punjabi), and global languages
+         * (French, German, Spanish, Arabic, Turkish, Russian, Indonesian). English keywords
+         * appear first because virtually all email OTPs from Indian and global services are
+         * written in English; the other languages serve as a safety net for regional providers.
          */
         private val OTP_KEYWORDS = listOf(
+            // ── English ──
             "otp",
             "verification code",
             "one time password",
@@ -72,24 +97,65 @@ class EmailOTPListenerService : NotificationListenerService() {
             "one-time verification",
             "security code",
             "code",
-            "two factor authentication"
+            "two factor authentication",
+            "2fa",
+            "passcode",
+            "pin",
+            // ── Hindi ──
+            "ओटीपी",
+            "सत्यापन कोड",
+            "एकबारगी पासवर्ड",
+            "सुरक्षा कोड",
+            // ── Bengali ──
+            "যাচাইকরণ কোড",
+            "ওটিপি",
+            // ── Telugu ──
+            "ధృవీకరణ కోడ్",
+            "ఓటీపీ",
+            // ── Tamil ──
+            "சரிபார்ப்பு குறியீடு",
+            // ── Gujarati ──
+            "ઓટીપી", "ચકાસણી કોડ",
+            // ── Kannada ──
+            "ಒಟಿಪಿ", "ಪರಿಶೀಲನಾ ಕೋಡ್",
+            // ── Malayalam ──
+            "ഒടിപി", "സ്ഥിരീകരണ കോഡ്",
+            // ── Marathi ──
+            "सत्यापन कोड",
+            // ── Punjabi ──
+            "ਓਟੀਪੀ", "ਤਸਦੀਕ ਕੋਡ",
+            // ── French ──
+            "code de vérification",
+            "mot de passe à usage unique",
+            // ── German ──
+            "verifizierungscode",
+            // ── Spanish ──
+            "código de verificación",
+            // ── Arabic ──
+            "رمز التحقق",
+            // ── Turkish ──
+            "doğrulama kodu",
+            // ── Russian ──
+            "код подтверждения",
+            // ── Indonesian ──
+            "kode verifikasi"
         )
     }
 
     /**
-     * Called by the system each time a notification is posted anywhere on the device.
+     * Invoked by the system whenever any notification is posted on the device.
      *
-     * Guards:
-     * - Ignores `null` notifications.
-     * - Only processes notifications from [EMAIL_APP_PACKAGES].
-     * - Applies a 2-second debounce.
-     * - Skips OTPs that match the last processed code (deduplication).
+     * Filtering and guard conditions applied in order:
+     *  1. Null check on [sbn] — the system contract allows null here.
+     *  2. Package allow-list check against [EMAIL_APP_PACKAGES].
+     *  3. Time-based debounce against [MIN_PROCESSING_INTERVAL].
+     *  4. Full notification text assembled from all extras, checked for [OTP_KEYWORDS].
+     *  5. Extracted OTP must differ from [lastProcessedOTP] to prevent re-processing.
      */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         super.onNotificationPosted(sbn)
         if (sbn == null) return
 
-        // Only process known email app packages
         if (!EMAIL_APP_PACKAGES.contains(sbn.packageName)) return
 
         val currentTime = System.currentTimeMillis()
@@ -98,7 +164,8 @@ class EmailOTPListenerService : NotificationListenerService() {
         try {
             val extras = sbn.notification?.extras ?: return
 
-            // Combine all text fields into one string for keyword + OTP scanning
+            // Pull every text-bearing extra and join them so a code split across
+            // the title and body can still be matched in a single pass.
             val title   = extras.getCharSequence(Notification.EXTRA_TITLE)?.toString()    ?: ""
             val text    = extras.getCharSequence(Notification.EXTRA_TEXT)?.toString()     ?: ""
             val bigText = extras.getCharSequence(Notification.EXTRA_BIG_TEXT)?.toString() ?: ""
@@ -110,17 +177,19 @@ class EmailOTPListenerService : NotificationListenerService() {
             if (containsOTPKeyword(fullContent)) {
                 val otpCode = extractOTP(fullContent)
 
-                // Only act if we found a new OTP that differs from the last one we processed
+                // Only act if we found a new OTP that differs from the last one processed,
+                // preventing the same code from being sent to the Mac multiple times if the
+                // email app refreshes its notification badge for the same message.
                 if (otpCode != null && otpCode != lastProcessedOTP) {
                     lastProcessedTime = currentTime
                     lastProcessedOTP  = otpCode
 
-                    // Copy to clipboard via the ghost activity so it's immediately pasteable
+                    // Write to the Android clipboard so the user can paste immediately if needed.
                     ClipboardGhostActivity.copyToClipboard(this, otpCode)
-                    // Push the OTP to the Mac via Firestore
+                    // Push the OTP to the Mac via Firestore.
                     OTPNotificationService.notifyOTPDetected(this, otpCode)
 
-                    // Toast must run on the main thread
+                    // Toast.makeText must run on the main thread; post via mainHandler.
                     mainHandler.post {
                         Toast.makeText(
                             this@EmailOTPListenerService,
@@ -135,14 +204,16 @@ class EmailOTPListenerService : NotificationListenerService() {
         }
     }
 
-    /** Called when a notification is removed. Not currently used. */
+    /** Called when a notification is dismissed. Not used by this service. */
     override fun onNotificationRemoved(sbn: StatusBarNotification?) {
         super.onNotificationRemoved(sbn)
     }
 
     /**
-     * Cleans up the handler and resets deduplication state when the service is destroyed
-     * (e.g. when the user revokes Notification Listener permission).
+     * Called when the service is shut down — either because the user revoked notification-listener
+     * permission or the system destroyed the service. Cancels all pending main-thread handler
+     * callbacks to prevent memory leaks, and resets the deduplication state so a future
+     * service instance starts cleanly.
      */
     override fun onDestroy() {
         super.onDestroy()
@@ -151,14 +222,18 @@ class EmailOTPListenerService : NotificationListenerService() {
         lastProcessedOTP  = ""
     }
 
-    /** Called when the service successfully binds to the notification system. */
+    /**
+     * Called once the service has successfully bound to the notification system and is
+     * ready to receive [onNotificationPosted] callbacks.
+     */
     override fun onListenerConnected() {
         super.onListenerConnected()
     }
 
     /**
-     * Called when the service is unbound (e.g. permission revoked or device rebooted).
-     * Clears any pending handler callbacks to avoid memory leaks.
+     * Called when the service loses its notification-listener binding — typically after the
+     * user revokes the Notification Listener permission or the system performs a settings reset.
+     * Pending main-thread callbacks are cancelled here to prevent handler memory leaks.
      */
     override fun onListenerDisconnected() {
         super.onListenerDisconnected()
@@ -166,10 +241,11 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Maps a package name to a human-readable email app name for use in log messages.
+     * Translates an email-app package name into a human-readable display name.
+     * Used in log messages and any future debug UI to identify which app produced a notification.
      *
-     * @param packageName The package name of the email app.
-     * @return A friendly display name, or the raw package name as a fallback.
+     * @param packageName The Android package identifier of the email app.
+     * @return A friendly name string, or the raw [packageName] for unrecognised packages.
      */
     private fun getAppName(packageName: String): String {
         return when (packageName) {
@@ -186,8 +262,8 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Returns `true` if [content] contains at least one [OTP_KEYWORDS] entry.
-     * Comparison is case-insensitive.
+     * Returns `true` if [content] contains at least one keyword from [OTP_KEYWORDS].
+     * Lowercases [content] before comparison to ensure the check is case-insensitive.
      */
     private fun containsOTPKeyword(content: String): Boolean {
         val lower = content.lowercase()
@@ -195,19 +271,22 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Attempts to extract a numeric OTP code from [content] using two regex patterns:
+     * Extracts the first valid OTP code from [content] using two regex patterns.
      *
-     * - **Pattern 1**: Standalone 4–8 digit sequence (`\b(\d{4,8})\b`).
-     * - **Pattern 2**: Split-format 3–4 digit groups separated by space or dash.
+     * **Pattern 1** — word-boundary numeric sequence: `\b(\d{4,8})\b`
+     *   Matches any standalone 4–8 digit number. Each match is passed through [isValidOTP]
+     *   to reject digit sequences that form part of a longer number (phone numbers, etc.).
      *
-     * Each Pattern 1 candidate is validated by [isValidOTP] before being returned.
+     * **Pattern 2** — split-format: `(\d{3,4})[\s\-](\d{3,4})`
+     *   Fallback for grouped codes like "123 456" or "1234-5678". The two digit groups are
+     *   joined and the combined length must be 4–8 digits.
      *
-     * @return The first valid OTP string found, or `null`.
+     * @return The OTP string if found and valid, or `null` if nothing matched.
      */
     private fun extractOTP(content: String): String? {
-        // Pattern 1: plain 4–8 digit number
+        // Pattern 1: standalone 4–8 digit number.
         val pattern1 = Regex("""\b(\d{4,8})\b""")
-        // Pattern 2: split-format like "123 456" or "123-456"
+        // Pattern 2: split-format like "123 456" or "123-456".
         val pattern2 = Regex("""(\d{3,4})[\s\-](\d{3,4})""")
 
         for (match in pattern1.findAll(content)) {
@@ -215,7 +294,7 @@ class EmailOTPListenerService : NotificationListenerService() {
             if (isValidOTP(code, content, match.range)) return code
         }
 
-        // Fallback: try the split-format pattern
+        // Fallback: try the split-format pattern and concatenate the two groups.
         val match2 = pattern2.find(content)
         if (match2 != null) {
             val combined = match2.groupValues[1] + match2.groupValues[2]
@@ -226,16 +305,22 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Validates that [code] is a genuine OTP and not part of a longer number.
+     * Determines whether a digit sequence qualifies as a genuine OTP.
      *
-     * Checks:
-     * - Length is 4–8 digits.
-     * - Characters immediately surrounding the code are not digits (no longer number).
-     * - Surrounding characters are whitespace, punctuation, or letters.
+     * A candidate is rejected if:
+     *  - Its length is outside the 4–8 digit OTP range.
+     *  - The character immediately before it is a digit (it is part of a longer number).
+     *  - The character immediately after it is a digit (same reason).
+     *  - Either boundary character is something other than whitespace, common punctuation,
+     *    or an alphabetic character (an unusual delimiter the regex may have missed).
      *
-     * @param code        Digit string to validate.
-     * @param fullContent Original notification text (used for boundary checks).
-     * @param range       Index range of [code] within [fullContent].
+     * Boundary characters default to a space when [code] appears at the very start or end
+     * of [fullContent], so edge-of-string codes are accepted correctly.
+     *
+     * @param code        Candidate digit string.
+     * @param fullContent Complete notification text providing boundary characters.
+     * @param range       Character range of [code] within [fullContent].
+     * @return `true` if [code] should be treated as a valid OTP.
      */
     private fun isValidOTP(code: String, fullContent: String, range: IntRange): Boolean {
         if (code.length !in 4..8) return false
@@ -243,7 +328,7 @@ class EmailOTPListenerService : NotificationListenerService() {
         val before = if (range.first > 0) fullContent[range.first - 1] else ' '
         val after  = if (range.last  < fullContent.length - 1) fullContent[range.last + 1] else ' '
 
-        // Reject if the code is part of a longer digit sequence
+        // Reject if the code is embedded in a longer digit sequence.
         if (before.isDigit() || after.isDigit()) return false
 
         val allowed = setOf(' ', '\n', '\r', '\t', '.', ':', '-', ',', '(', ')', '[', ']', '<', '>')

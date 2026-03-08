@@ -42,21 +42,46 @@ import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 
 /**
- * PermissionPage is the onboarding step that walks the user through granting the
- * four permissions required for ClipSync to work reliably.
+ * PermissionPage is the onboarding screen that guides the user through granting the four
+ * Android permissions ClipSync requires before it can operate reliably in the background.
  *
- * Layout (top → bottom, all staggered):
- * 1. A bold instruction header that slides in from the top.
- * 2. A semi-transparent card containing four [PermissionItem] rows (slide in from the left).
- * 3. A "Finish Setup" button at the bottom that is only activatable once the two
- *    mandatory permissions (Accessibility + Display Over Apps) are granted.
+ * **Screen structure (top → bottom, all entrance-animated):**
+ *  1. **Header text** – a bold instruction prompt ("Just allow a few permissions to keep
+ *     things smooth") that slides down from 40 px above its resting position.
+ *  2. **Permissions card** – a semi-transparent rounded card (purple→blue vertical
+ *     gradient at 30 % opacity) housing four independently animated [PermissionItem] rows:
+ *       - Notification    (optional)  – alerts when sync pauses or an update arrives.
+ *       - Accessibility   (mandatory) – detects clipboard changes via the foreground service.
+ *       - Display Over Apps (mandatory) – allows the background sync overlay to appear.
+ *       - SMS Access      (optional)  – auto-reads incoming OTP codes for instant sync.
+ *  3. **"Finish Setup" button** – a pill-shaped glass button that appears last. It only
+ *     navigates forward when **both** mandatory permissions (Accessibility + Display Over
+ *     Apps) are confirmed; otherwise it shows a context-aware [Toast] identifying which
+ *     required permission is still missing.
  *
- * Permission status is polled every second via a `while(true)` loop inside
- * [LaunchedEffect] to detect changes made in Android Settings without needing
- * the user to re-tap anything.
+ * **Staggered entrance animation** – each UI element has its own `showXxx` boolean flag
+ * flipped to `true` with a 100–150 ms inter-step delay inside a single [LaunchedEffect],
+ * producing a smooth cascading reveal that draws the user's eye downward through the UI.
  *
- * @param onFinishSetup Called when the user taps "Finish Setup" and the mandatory
- *                      permissions are confirmed. Navigates to [Homescreen].
+ * **Live permission polling** – a second [LaunchedEffect] runs an infinite `while(true)`
+ * loop with a 1 000 ms `delay` that re-checks every permission state on each tick. This
+ * automatically keeps the toggle switches in sync when the user grants a permission inside
+ * Android Settings and returns to the app, without requiring any manual refresh. The loop
+ * also detects the accessibility service transitioning from disabled → enabled and fires a
+ * confirmation [Toast] exactly once for that transition.
+ *
+ * **Notification permission** – handled separately because [Manifest.permission.POST_NOTIFICATIONS]
+ * became a runtime permission only on API 33 (Android 13). On API 33+ a standard
+ * [rememberLauncherForActivityResult] runtime-permission launcher is used; on older APIs
+ * the app's system notification settings page is opened directly via an explicit [Intent].
+ *
+ * **SMS permission** – [Manifest.permission.READ_SMS] and [Manifest.permission.RECEIVE_SMS]
+ * are requested together in a single [ActivityResultContracts.RequestMultiplePermissions]
+ * call. Both must be granted for `smsPermissionGranted` to become `true`.
+ *
+ * @param onFinishSetup Invoked when the user taps "Finish Setup" and both mandatory
+ *                      permissions are confirmed. The caller is responsible for
+ *                      navigating to the main [Homescreen].
  */
 @Composable
 fun PermissionPage(onFinishSetup: () -> Unit = {}) {
@@ -65,7 +90,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
 
-    // Scale factors relative to the 412×915 design reference
+    // Scale factors derived from the 412×915 dp reference canvas. The unified `scale`
+    // uses the smaller axis to preserve proportions on both tall and wide displays.
     val widthScale = screenWidth.value / 412f
     val heightScale = screenHeight.value / 915f
     val scale = min(widthScale, heightScale)
@@ -77,21 +103,25 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         Font(R.font.roboto_black, FontWeight.Black)
     )
 
-    // ── Permission status flags ───────────────────────────────────────────────
+    // ── Live permission state ─────────────────────────────────────────────────────────────
+    // These three flags are refreshed every second by the polling LaunchedEffect below.
     var accessibilityGranted by remember { mutableStateOf(false) }
     var overlayGranted by remember { mutableStateOf(false) }
     var smsPermissionGranted by remember { mutableStateOf(false) }
 
-    // ── Staggered entrance animation flags ────────────────────────────────────
+    // ── Staggered entrance gate flags ─────────────────────────────────────────────────────
+    // Each flag gates a separate AnimatedVisibility layer. They are flipped to `true`
+    // in sequence inside LaunchedEffect to produce the cascading top-down reveal.
     var showHeader by remember { mutableStateOf(false) }
     var showCard by remember { mutableStateOf(false) }
-    var showItem1 by remember { mutableStateOf(false) }  // Notification
-    var showItem2 by remember { mutableStateOf(false) }  // Accessibility
-    var showItem3 by remember { mutableStateOf(false) }  // Display Over Apps
-    var showItem4 by remember { mutableStateOf(false) }  // SMS Access
+    var showItem1 by remember { mutableStateOf(false) }  // Notification row
+    var showItem2 by remember { mutableStateOf(false) }  // Accessibility row
+    var showItem3 by remember { mutableStateOf(false) }  // Display Over Apps row
+    var showItem4 by remember { mutableStateOf(false) }  // SMS Access row
     var showButton by remember { mutableStateOf(false) }
 
-    // Stagger in each element 100–150 ms apart for a cascading feel
+    // Stagger each element 100–150 ms apart so the eye is guided naturally downward
+    // through the header → card → items → button hierarchy.
     LaunchedEffect(Unit) {
         delay(100)
         showHeader = true
@@ -109,18 +139,20 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         showButton = true
     }
 
-    // POST_NOTIFICATIONS permission (required on Android 13 / API 33+)
+    // Notification permission: only a runtime permission on API 33+; automatically
+    // granted on older Android versions and treated as always-on below that threshold.
     var notificationGranted by remember {
         mutableStateOf(
             if (Build.VERSION.SDK_INT >= 33) {
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             } else {
-                true // Automatically granted below API 33
+                true // Notification permission is implicitly granted below Android 13.
             }
         )
     }
 
-    // Launcher for single-permission requests (used for POST_NOTIFICATIONS)
+    // Runtime launcher for POST_NOTIFICATIONS (API 33+). The result callback updates
+    // `notificationGranted` immediately so the toggle reflects the user's decision.
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission(),
         onResult = { isGranted ->
@@ -128,7 +160,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         }
     )
 
-    // Launcher for multi-permission requests (used for READ_SMS + RECEIVE_SMS together)
+    // Multi-permission launcher that requests READ_SMS and RECEIVE_SMS together in a
+    // single system dialog. Both must be granted for `smsPermissionGranted` to be true.
     val smsLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
         onResult = { permissions ->
@@ -137,8 +170,9 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         }
     )
 
-    // Polls permission states every second so the UI updates automatically when the
-    // user returns from Android Settings (without needing to tap anything).
+    // Polls every 1 000 ms to detect permission changes made in Android Settings while
+    // the app is in the background. This keeps the toggle switches in sync without
+    // requiring the user to manually refresh or re-open the app.
     LaunchedEffect(Unit) {
         accessibilityGranted = isAccessibilityServiceEnabled(context)
         smsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
@@ -156,7 +190,9 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                 notificationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
             }
 
-            // Show a toast exactly once when accessibility transitions from off → on
+            // Fire a confirmation toast exactly once when accessibility transitions
+            // from disabled to enabled, giving the user positive feedback without
+            // them having to look at the screen to confirm the change took effect.
             if (wasEnabled != accessibilityGranted && accessibilityGranted) {
                 Toast.makeText(context, " Accessibility Enabled!", Toast.LENGTH_SHORT).show()
             }
@@ -167,8 +203,9 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         modifier = Modifier.fillMaxSize()
     ) {
 
-        // ── HEADER ────────────────────────────────────────────────────────────
-        // Bold instruction text at the top, slides down from above
+        // ── HEADER ────────────────────────────────────────────────────────────────────────
+        // Bold instruction text centred at the top of the screen. Slides 40 px down into
+        // position while fading in over 400 ms for a clean, unobtrusive entrance.
         AnimatedVisibility(
             visible = showHeader,
             enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { -40 }, animationSpec = tween(400)),
@@ -189,9 +226,10 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
             )
         }
 
-        // ── PERMISSIONS CARD ──────────────────────────────────────────────────
-        // A semi-transparent card containing all four permission toggle rows.
-        // Each row animates in from the left independently.
+        // ── PERMISSIONS CARD ──────────────────────────────────────────────────────────────
+        // A rounded card filled with a vertical purple→blue gradient at 30 % opacity.
+        // The four permission rows are positioned absolutely inside it and each animates
+        // in from the left independently, creating a left-to-right wave of toggles.
         AnimatedVisibility(
             visible = showCard,
             enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { 40 }, animationSpec = tween(400)),
@@ -211,7 +249,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                     )
             ) {
 
-                // Row 1: Notification permission
+                // Row 1 – Notification: optional permission; on API 33+ uses a runtime
+                // request, on older APIs opens the app's system notification settings page.
                 AnimatedVisibility(
                     visible = showItem1,
                     enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
@@ -225,10 +264,11 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         onToggle = {
                             if (!notificationGranted) {
                                 if (Build.VERSION.SDK_INT >= 33) {
-                                    // API 33+: request POST_NOTIFICATIONS at runtime
+                                    // API 33+: POST_NOTIFICATIONS must be requested at runtime.
                                     launcher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 } else {
-                                    // Older: open the app's notification settings page directly
+                                    // Pre-API 33: open the app's notification settings directly,
+                                    // since this version does not support runtime permission requests.
                                     val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
                                         putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
                                     }
@@ -241,7 +281,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                      )
                  }
 
-                // Row 2: Accessibility Service permission
+                // Row 2 – Accessibility: mandatory permission. Opens the system Accessibility
+                // Settings page and shows a toast to help the user locate the ClipSync toggle.
                 AnimatedVisibility(
                     visible = showItem2,
                     enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
@@ -254,7 +295,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         isChecked = accessibilityGranted,
                         onToggle = {
                             if (!accessibilityGranted) {
-                                // Redirect to the system Accessibility Settings page
+                                // Send the user to Android's Accessibility Settings so they can
+                                // locate and enable the ClipboardAccessibilityService toggle.
                                 val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                                 context.startActivity(intent)
                                 Toast.makeText(context, "Enable ClipSync in Accessibility", Toast.LENGTH_LONG).show()
@@ -265,7 +307,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                      )
                  }
 
-                // Row 3: Display Over Other Apps (overlay) permission
+                // Row 3 – Display Over Other Apps: mandatory permission. Opens the
+                // MANAGE_OVERLAY_PERMISSION page scoped to ClipSync's own package.
                 AnimatedVisibility(
                     visible = showItem3,
                     enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
@@ -278,7 +321,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         isChecked = overlayGranted,
                         onToggle = {
                             if (!overlayGranted) {
-                                // Redirect to the MANAGE_OVERLAY_PERMISSION page for this app
+                                // Deep-link to the overlay permission settings page for this
+                                // specific package so the user lands on the correct toggle directly.
                                 val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION)
                                 intent.data = android.net.Uri.parse("package:${context.packageName}")
                                 context.startActivity(intent)
@@ -290,7 +334,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                      )
                  }
 
-                // Row 4: SMS read permission for OTP auto-detection
+                // Row 4 – SMS Access: optional permission for OTP auto-detection.
+                // READ_SMS and RECEIVE_SMS are requested together in one system dialog.
                 AnimatedVisibility(
                     visible = showItem4,
                     enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
@@ -303,7 +348,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         isChecked = smsPermissionGranted,
                         onToggle = {
                             if (!smsPermissionGranted) {
-                                // Request both READ_SMS and RECEIVE_SMS in a single call
+                                // Request both READ_SMS and RECEIVE_SMS simultaneously so the
+                                // user only sees a single permission dialog for SMS access.
                                 smsLauncher.launch(
                                     arrayOf(
                                         Manifest.permission.RECEIVE_SMS,
@@ -319,9 +365,10 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
             }
         }
 
-        // ── FINISH SETUP BUTTON ───────────────────────────────────────────────
-        // Only navigates forward if the two mandatory permissions (Accessibility +
-        // Display Over Apps) are enabled. Otherwise shows a toast explaining what's missing.
+        // ── FINISH SETUP BUTTON ───────────────────────────────────────────────────────────
+        // Scales in with a slight grow-from-80% entrance. Tapping it re-checks the two
+        // mandatory permissions at the moment of the tap (not just relying on the polled
+        // state) and either proceeds or shows a targeted toast identifying what's missing.
         AnimatedVisibility(
             visible = showButton,
             enter = fadeIn(tween(400)) + scaleIn(initialScale = 0.8f, animationSpec = tween(400)),
@@ -346,7 +393,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         if (isAccessibilityServiceEnabled(context) && Settings.canDrawOverlays(context)) {
                             onFinishSetup()
                         } else {
-                            // Remind the user which mandatory permission is still missing
+                            // Show a specific toast so the user knows exactly which of the
+                            // two mandatory permissions is blocking progression.
                             if (!isAccessibilityServiceEnabled(context)) {
                                 Toast.makeText(context, "Please enable Accessibility first", Toast.LENGTH_SHORT).show()
                             } else if (!Settings.canDrawOverlays(context)) {
@@ -355,7 +403,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         }
                     }
             ) {
-                // Checkmark icon on the left side of the button
+                // Checkmark icon on the left side of the pill button.
                 Icon(
                     painter = painterResource(id = R.drawable.check),
                     contentDescription = "Check",
@@ -365,7 +413,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                     tint = Color.Black
                 )
 
-                // "Finish Setup" label to the right of the icon
+                // "Finish Setup" label positioned to the right of the checkmark icon.
                 Text(
                     text = "Finish Setup",
                     fontFamily = robotoFontFamily,
@@ -383,24 +431,40 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
 }
 
 /**
- * A single permission toggle row used inside [PermissionPage].
+ * PermissionItem renders a single, self-contained permission toggle row inside the
+ * permissions card on [PermissionPage].
  *
- * Displays:
- * - An icon representing the permission category.
- * - A bold title and a shorter description below it.
- * - A [Switch] on the right that reflects the current granted state.
+ * **Layout** – the row uses a horizontal [Box] + [Row] arrangement:
+ *  - An [Icon] on the far left visually identifies the permission category at a glance
+ *    (e.g. a notification bell, an accessibility person, a shield for overlay).
+ *  - A [Column] in the centre carries two [Text] nodes: a bold medium-weight title (e.g.
+ *    "Accessibility") on the first line, and a lighter normal-weight one-line description
+ *    below explaining *why* the permission is needed. The column takes all remaining
+ *    horizontal space via `Modifier.weight(1f)`.
+ *  - A [Switch] on the far right reflects the current granted state. Its track turns
+ *    iOS-style blue (`#007AFF`) when checked and grey when unchecked. The thumb is white
+ *    in both states to stay consistent with iOS switch aesthetics.
  *
- * Tapping the switch when `isChecked` is `false` fires [onToggle], which the caller uses
- * to launch the appropriate permission request or Settings intent.
+ * **Interaction** – tapping the switch when `isChecked` is `false` invokes [onToggle],
+ * which the caller uses to launch the appropriate runtime permission request or to open
+ * the relevant Android Settings deep-link. When `isChecked` is already `true` the toggle
+ * is effectively a no-op (no action is needed to un-grant a permission from here).
+ *
+ * **Sizing** – the row is sized at 350 × 80 dp (design-canvas units) and all internal
+ * spacers, icon sizes, and font sizes are multiplied by [scale] so the row remains
+ * visually proportional on every supported device density.
  *
  * @param iconRes     Drawable resource ID for the permission category icon.
- * @param title       Short permission name shown in bold (e.g. "Accessibility").
- * @param description One-line explanation of why the permission is needed.
- * @param isChecked   Whether the permission is currently granted.
- * @param onToggle    Called with the new switch value when the user taps the toggle.
- * @param fontFamily  The Roboto font family.
- * @param isStatic    If `true`, the toggle is purely decorative and not interactive (unused currently).
- * @param scale       Density-independent scale factor for responsive sizing.
+ * @param title       Short, human-readable permission name displayed in bold (e.g. "Accessibility").
+ * @param description Brief one-line rationale explaining why this permission is needed.
+ * @param isChecked   `true` if the permission is currently granted; drives the switch state.
+ * @param onToggle    Invoked with the new boolean value when the user changes the switch.
+ *                    The caller is responsible for the actual permission request logic.
+ * @param fontFamily  The Roboto [FontFamily] instance shared by the parent composable.
+ * @param isStatic    Reserved parameter; if `true` the item is intended to be non-interactive.
+ *                    Not currently wired to any behaviour but present for future use.
+ * @param scale       Unified density-independent scale factor for responsive sizing,
+ *                    derived from the device screen dimensions vs. the design canvas.
  */
 @Composable
 fun PermissionItem(
@@ -428,7 +492,8 @@ fun PermissionItem(
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
 
-            // Permission category icon (e.g. notification bell, accessibility icon)
+            // Category icon: visually identifies the permission type at a glance before
+            // the user reads the title (e.g. bell → notifications, person → accessibility).
             Icon(
                 painter = painterResource(id = iconRes),
                 contentDescription = title,
@@ -438,7 +503,8 @@ fun PermissionItem(
 
             Spacer(modifier = Modifier.width((12 * scale).dp))
 
-            // Text column: bold title on top, lighter description below
+            // Text column: bold title on the first line establishes the permission name;
+            // the lighter description below gives just enough context without overwhelming.
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -465,7 +531,8 @@ fun PermissionItem(
                 )
             }
 
-            // Toggle switch – green when permission is granted, grey when not
+            // Toggle switch: blue track (#007AFF) when on mirrors the iOS convention
+            // familiar to the target audience; white thumb in both states for consistency.
             Switch(
                 checked = isChecked,
                 onCheckedChange = onToggle,
@@ -473,7 +540,7 @@ fun PermissionItem(
                     .scale(scale),
                 colors = SwitchDefaults.colors(
                     checkedThumbColor = Color.White,
-                    checkedTrackColor = Color(0xFF007AFF),   // iOS-style blue when on
+                    checkedTrackColor = Color(0xFF007AFF),   // iOS-style blue track when permission is granted
                     uncheckedThumbColor = Color.White,
                     uncheckedTrackColor = Color.Gray
                 )
@@ -483,14 +550,23 @@ fun PermissionItem(
 }
 
 /**
- * Checks whether ClipSync's [ClipboardAccessibilityService] is currently enabled
- * in Android's Accessibility Settings.
+ * Checks whether ClipSync's [ClipboardAccessibilityService] is currently active in
+ * Android's Accessibility Settings.
  *
- * Tries multiple name formats to account for variations across Android versions
- * and launchers (fully-qualified, short, display name).
+ * Android stores the list of enabled accessibility services as a colon-separated string
+ * in [Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES]. The format of each entry is not
+ * guaranteed to be consistent across Android versions, OEM skins, or launchers — it may
+ * appear as the fully-qualified component name, a shortened form starting with `/`, or
+ * just the bare class name. To guard against all of these variants, the function tries
+ * four candidate name formats in order and returns `true` as soon as any match is found.
  *
- * @param context The application context.
- * @return `true` if the service is found in the enabled services list.
+ * The entire lookup is wrapped in a `try/catch` block so that a [SecurityException] or
+ * any unexpected [Settings.SettingNotFoundException] from the [Settings.Secure] API does
+ * not crash the permission-polling loop in [PermissionPage]; it simply returns `false`.
+ *
+ * @param context The application or activity [Context] used to resolve the content resolver.
+ * @return `true` if any of the known name variants for [ClipboardAccessibilityService]
+ *         appears in the system's enabled-accessibility-services string; `false` otherwise.
  */
 fun isAccessibilityServiceEnabled(context: android.content.Context): Boolean {
     try {

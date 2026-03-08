@@ -11,32 +11,42 @@ import android.os.Looper
 import android.util.Log
 
 /**
- * ClipboardGhostActivity is a completely invisible [Activity] used as a workaround
- * for Android's clipboard access restrictions.
+ * An invisible, zero-UI [Activity] that acts as a proxy for clipboard operations on Android 10+.
  *
- * **Why this exists:**
- * Since Android 10, apps can only read the clipboard when they have an active foreground window.
- * Background services (including [ClipboardAccessibilityService]) cannot access the clipboard
- * directly. This Activity is launched with no visible UI and no transition animation,
- * performs the clipboard operation in the foreground, then immediately finishes.
+ * Android 10 (API 29) introduced a hard restriction: only the app whose window is currently
+ * in the foreground may read the system clipboard. [ClipboardAccessibilityService] and other
+ * background components therefore cannot access clipboard content directly. This Activity
+ * sidesteps the restriction by briefly obtaining a foreground window, performing the clipboard
+ * read or write, and then immediately dismissing itself — all without ever drawing a visible
+ * pixel on screen.
  *
- * **Two operations are supported:**
- * - [ACTION_WRITE]: Sets the system clipboard to the text passed via [EXTRA_CLIP_TEXT].
- * - [ACTION_READ]:  Reads the current system clipboard and forwards the text to
- *   [ClipboardAccessibilityService.onClipboardRead] for upload to Firestore.
+ * Supported operations:
+ *  - [ACTION_WRITE]: Writes the string supplied via [EXTRA_CLIP_TEXT] to the system clipboard.
+ *    Executed as soon as the Activity is created, then the Activity finishes.
+ *  - [ACTION_READ]:  Reads the current primary clip from the system clipboard. The actual read
+ *    is intentionally deferred to [onResume] to guarantee the window has acquired foreground
+ *    focus before [ClipboardManager.getPrimaryClip] is called. The result is forwarded to
+ *    [ClipboardAccessibilityService.onClipboardRead] for deduplication and Firestore upload.
  *
- * A [safetyTimeout] of 2 seconds ensures the Activity always finishes even if something goes wrong.
+ * A 2-second hard timeout ([SAFETY_TIMEOUT_MS]) ensures the Activity always finishes even if
+ * an unexpected error or lifecycle anomaly prevents the normal code path from running.
+ * [FLAG_ACTIVITY_SINGLE_TOP] allows an existing instance to be reused rather than stacking
+ * multiple invisible Activity instances on top of each other.
  */
 class ClipboardGhostActivity : Activity() {
 
-    // Prevents multiple clipboard reads in one lifecycle (onCreate → onResume)
+    // Ensures the clipboard is read at most once per Activity instance across onCreate/onResume.
     private var hasReadClipboard = false
-    // Prevents calling finish() more than once
+    // Guards against calling finish() more than once, which would throw IllegalStateException.
     private var hasFinished = false
-    // Posts the safetyTimeout runnable; runs on the main thread
+    // All posts to this handler run on the main thread; used exclusively for the safety timeout.
     private val safetyHandler = Handler(Looper.getMainLooper())
 
-    /** Forces the Activity to finish if it hasn't done so within [SAFETY_TIMEOUT_MS]. */
+    /**
+     * Dead-man's-switch runnable posted via [safetyHandler] at creation time. If [finishSafely]
+     * has not been called within [SAFETY_TIMEOUT_MS] milliseconds, this fires and force-finishes
+     * the Activity, preventing it from lingering invisibly in the background indefinitely.
+     */
     private val safetyTimeout = Runnable {
         if (!hasFinished) {
             Log.w(TAG, "Safety timeout triggered - force finishing activity")
@@ -47,33 +57,40 @@ class ClipboardGhostActivity : Activity() {
     companion object {
         private const val TAG = "ClipboardGhost"
 
-        /** Maximum time (ms) the Activity is allowed to live before being force-finished. */
+        /**
+         * Maximum lifetime of this Activity in milliseconds. If [finishSafely] has not been
+         * called by the time this elapses, [safetyTimeout] fires and force-finishes the Activity.
+         */
         private const val SAFETY_TIMEOUT_MS = 2000L
 
-        /** Intent extra key for the text to write to the clipboard. */
+        /** Intent extra key carrying the plain-text string to write to the clipboard. */
         const val EXTRA_CLIP_TEXT = "extra_clip_text"
 
-        /** Action value that tells the Activity to write text to the clipboard. */
+        /** Intent action requesting a clipboard read; the actual read is deferred to [onResume]. */
         const val ACTION_READ  = "action_read"
 
-        /** Action value that tells the Activity to read text from the clipboard. */
+        /** Intent action requesting a clipboard write using the text supplied in [EXTRA_CLIP_TEXT]. */
         const val ACTION_WRITE = "action_write"
 
         /**
-         * Launches a ghost Activity instance to write [text] to the system clipboard.
+         * Convenience factory that starts a ghost Activity to write [text] to the clipboard.
          *
-         * Uses [FLAG_ACTIVITY_NO_ANIMATION] so the Activity is invisible to the user.
-         * Uses [FLAG_ACTIVITY_SINGLE_TOP] + [FLAG_ACTIVITY_CLEAR_TOP] to reuse an
-         * existing instance if one is already running.
+         * The Intent is built with [FLAG_ACTIVITY_NO_ANIMATION] (invisible launch),
+         * [FLAG_ACTIVITY_SINGLE_TOP] (reuse an existing instance if already on the stack), and
+         * [FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS] (keep it off the recent-apps screen).
+         * Any failure to start the Activity is caught and logged so the caller does not need
+         * exception handling.
          *
-         * @param context Any valid [Context].
-         * @param text    The plain-text string to place on the clipboard.
+         * @param context Any valid [Context] from which the Activity can be started.
+         * @param text    Plain-text string to place on the system clipboard.
          */
         fun copyToClipboard(context: Context, text: String) {
             runCatching {
                 val intent = Intent(context, ClipboardGhostActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                     action = ACTION_WRITE
                     putExtra(EXTRA_CLIP_TEXT, text)
                 }
@@ -84,18 +101,22 @@ class ClipboardGhostActivity : Activity() {
         }
 
         /**
-         * Launches a ghost Activity instance to read the current system clipboard.
+         * Convenience factory that starts a ghost Activity to read the current clipboard.
          *
-         * The read happens in [onResume] (when the Activity has a foreground window),
-         * then the result is passed to [ClipboardAccessibilityService.onClipboardRead].
+         * The read operation is deferred to [onResume] so the Activity's window has fully
+         * acquired foreground focus before [ClipboardManager.getPrimaryClip] is called.
+         * The result is forwarded to [ClipboardAccessibilityService.onClipboardRead] for
+         * deduplication and Firestore upload to the paired Mac.
          *
-         * @param context Any valid [Context].
+         * @param context Any valid [Context] from which the Activity can be started.
          */
         fun readFromClipboard(context: Context) {
             runCatching {
                 val intent = Intent(context, ClipboardGhostActivity::class.java).apply {
-                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_ANIMATION or
-                        Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                     action = ACTION_READ
                 }
                 context.startActivity(intent)
@@ -106,21 +127,23 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Entry point. Removes all window animations, arms the safety timeout, then
-     * dispatches to [handleIntent] immediately.
+     * Suppresses all open-transition animations so the Activity is invisible to the user,
+     * arms the 2-second safety timeout, then immediately dispatches to [handleIntent].
+     * For write operations, the work is done and the Activity finishes before [onResume].
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         disableOpenAnimation()
 
-        // Arm the safety net — guarantees this Activity finishes within 2 seconds no matter what
+        // Post the safety net immediately; finishSafely() will cancel it in the happy path.
         safetyHandler.postDelayed(safetyTimeout, SAFETY_TIMEOUT_MS)
         handleIntent(intent)
     }
 
     /**
-     * Called when a new Intent arrives while the Activity is already at the top of the stack
-     * (due to [FLAG_ACTIVITY_SINGLE_TOP]). Updates the current intent and re-dispatches.
+     * Invoked when a new Intent arrives while this Activity sits at the top of the task stack
+     * (possible because [FLAG_ACTIVITY_SINGLE_TOP] is set). Updates the stored intent and
+     * re-dispatches to [handleIntent] to handle the new request without creating a new instance.
      */
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -129,15 +152,16 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * The Activity now has a foreground window — safe to access the clipboard.
-     * For [ACTION_READ] intents the actual read is deferred to this callback
-     * so the window is guaranteed to be visible.
+     * At this point the Activity's window is visible and has foreground focus, satisfying
+     * Android 10's prerequisite for clipboard reads. For [ACTION_READ] intents the clipboard
+     * access is deferred here (rather than [onCreate]) to guarantee focus is held before
+     * [ClipboardManager.getPrimaryClip] is invoked. The read is posted to the view hierarchy
+     * for one additional frame to let window focus fully settle.
      */
     override fun onResume() {
         super.onResume()
         if (intent.action == ACTION_READ && !hasReadClipboard && !hasFinished) {
             hasReadClipboard = true
-            // Post to the view hierarchy so the window focus is fully established first
             window.decorView.post {
                 readClipboardAndFinish()
             }
@@ -145,11 +169,11 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Routes the incoming intent to the correct clipboard operation.
+     * Routes the incoming intent to the appropriate clipboard operation:
      *
-     * - [ACTION_WRITE]: Immediately writes the extra text to the clipboard and finishes.
-     * - [ACTION_READ]:  Marks the pending read flag; actual read happens in [onResume].
-     * - Unknown:        Finishes immediately without doing anything.
+     * - [ACTION_WRITE]: Extracts [EXTRA_CLIP_TEXT], writes it to the clipboard, finishes.
+     * - [ACTION_READ]:  Resets [hasReadClipboard] so the deferred read runs in [onResume].
+     * - Unknown action: Finishes immediately without touching the clipboard.
      */
     private fun handleIntent(incomingIntent: Intent?) {
         when (incomingIntent?.action) {
@@ -162,7 +186,7 @@ class ClipboardGhostActivity : Activity() {
             }
 
             ACTION_READ -> {
-                // Actual read is deferred to onResume() so the window is in the foreground
+                // Reset the guard flag so onResume() triggers the deferred clipboard read.
                 hasReadClipboard = false
             }
 
@@ -173,9 +197,10 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Reads the current primary clip from the system [ClipboardManager] and forwards
-     * the text to [ClipboardAccessibilityService.onClipboardRead] for Firestore upload.
-     * Always calls [finishSafely] in the `finally` block.
+     * Reads the primary clip from [ClipboardManager] and forwards the text to
+     * [ClipboardAccessibilityService.onClipboardRead], which owns deduplication logic and
+     * uploads the content to Firestore for the paired Mac to consume.
+     * [finishSafely] is always called in the finally block to guarantee the Activity exits.
      */
     private fun readClipboardAndFinish() {
         try {
@@ -189,7 +214,6 @@ class ClipboardGhostActivity : Activity() {
             val text = clipData.getItemAt(0).text?.toString() ?: ""
 
             if (text.isNotBlank()) {
-                // Hand the text off to the service which handles deduplication and Firestore upload
                 ClipboardAccessibilityService.onClipboardRead(this, text)
             }
 
@@ -201,7 +225,8 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Writes [text] to the system clipboard as a plain-text clip labelled "Copied Text".
+     * Writes [text] to the system clipboard as a plain-text [ClipData] item labelled
+     * "Copied Text". The label is required by the [ClipData] API but is not shown to users.
      *
      * @param text The string to place on the clipboard.
      */
@@ -216,8 +241,9 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Idempotent finish — cancels the safety timeout and calls [finish] at most once.
-     * Guards against double-finish crashes that can occur in edge-case lifecycle flows.
+     * Idempotent finish that cancels the pending safety timeout and calls [finish] exactly once.
+     * Multiple calls — e.g. from both a normal code path and the safety timeout firing
+     * simultaneously — are handled safely without risk of a double-finish crash.
      */
     private fun finishSafely() {
         if (!hasFinished) {
@@ -227,19 +253,23 @@ class ClipboardGhostActivity : Activity() {
         }
     }
 
-    /** Overridden to suppress the close window transition animation. */
+    /** Delegates to super then suppresses the close animation so the dismissal is invisible. */
     override fun finish() {
         super.finish()
         disableCloseAnimation()
     }
 
-    /** Removes the safety timeout handler to avoid leaks when the Activity is destroyed. */
+    /** Cancels any pending handler callbacks on destruction to prevent handler memory leaks. */
     override fun onDestroy() {
         super.onDestroy()
         safetyHandler.removeCallbacks(safetyTimeout)
     }
 
-    /** Suppresses the Activity open/enter animation so it appears completely invisible. */
+    /**
+     * Removes the Activity open/enter transition animation so the launch is invisible.
+     * Uses the API-34+ [overrideActivityTransition] on modern devices and falls back to
+     * the deprecated [overridePendingTransition] on older API levels.
+     */
     private fun disableOpenAnimation() {
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_OPEN, 0, 0)
@@ -249,7 +279,11 @@ class ClipboardGhostActivity : Activity() {
         }
     }
 
-    /** Suppresses the Activity close/exit animation so it disappears completely invisibly. */
+    /**
+     * Removes the Activity close/exit transition animation so the dismissal is invisible.
+     * Uses the API-34+ [overrideActivityTransition] on modern devices and falls back to
+     * the deprecated [overridePendingTransition] on older API levels.
+     */
     private fun disableCloseAnimation() {
         if (android.os.Build.VERSION.SDK_INT >= 34) {
             overrideActivityTransition(android.app.Activity.OVERRIDE_TRANSITION_CLOSE, 0, 0)

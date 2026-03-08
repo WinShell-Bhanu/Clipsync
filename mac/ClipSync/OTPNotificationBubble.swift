@@ -1,11 +1,14 @@
+// OTPNotificationBubble.swift
+// Floating semi-transparent bubble that appears below the menu bar icon when an OTP arrives.
+// OTP digits are masked until the user hovers over them. Shows a Lottie tick animation
+// and a shimmer effect. Auto-dismisses after ~5 seconds with a fade-out animation.
+
 import SwiftUI
 import Lottie
 import Shimmer
 
+// MARK: - OTPNotificationBubble
 
-// Purpose: Struct that models otpnotification bubble behavior in this module.
-// Responsibilities: Encapsulates otpnotification bubble behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct OTPNotificationBubble: View {
     let otpCode: String
     @State private var opacity: Double = 0
@@ -81,17 +84,14 @@ struct OTPNotificationBubble: View {
 }
 
 
-// Purpose: Class that models otpbubble window behavior in this module.
-// Responsibilities: Encapsulates otpbubble window behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+// MARK: - OTPBubbleWindow
+
+/// Borderless NSWindow that positions the OTP bubble below the status bar button.
+/// Auto-closes via a Timer after 5.5 seconds.
 class OTPBubbleWindow: NSWindow {
     private var autoCloseTimer: Timer?
 
 
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: otpCode, statusItemButton.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(otpCode: String, statusItemButton: NSStatusBarButton) {
         let buttonFrame = statusItemButton.window?.convertToScreen(statusItemButton.frame) ?? .zero
 
@@ -133,10 +133,6 @@ class OTPBubbleWindow: NSWindow {
     }
 
 
-    // Purpose: Implements the cleanup operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func cleanup() {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -153,10 +149,6 @@ class OTPBubbleWindow: NSWindow {
     override var canBecomeMain: Bool { false }
 
 
-    // Purpose: Finalizes the instance before deallocation.
-    // Parameters: No external parameters.
-    // Returns: Void.
-    // Notes: Release observers, timers, and retained resources here.
     deinit {
         autoCloseTimer?.invalidate()
         autoCloseTimer = nil

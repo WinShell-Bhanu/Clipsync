@@ -1,18 +1,23 @@
 
 
 
+// ClipboardManager.swift
+// Singleton that polls NSPasteboard every 300 ms for changes, encrypts and uploads
+// content to Firestore, and listens for incoming clipboard items from Android.
+// Uses AES-GCM with a shared key stored in UserDefaults.
+
 import Foundation
 import AppKit
 import FirebaseFirestore
 import Combine
 import CryptoKit
 
+// MARK: - ClipboardManager
 
-// Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
-// Responsibilities: Encapsulates clipboard manager behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class ClipboardManager: ObservableObject {
     static let shared = ClipboardManager()
+
+    // MARK: - Properties
 
     @Published var history: [ClipboardItem] = []
     @Published var isSyncPaused: Bool = false
@@ -41,11 +46,9 @@ class ClipboardManager: ObservableObject {
     private var isListenerActive = false
     private var lastListenerUpdate = Date()
 
+    // MARK: - Monitoring
 
-    // Purpose: Starts monitoring flow and required listeners.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Starts a 300 ms DispatchSource timer that polls NSPasteboard for changes.
     func startMonitoring() {
         if isSyncPaused { return }
         stopMonitoring()
@@ -66,10 +69,7 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the toggle sync operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Toggles sync on/off, stopping or resuming both monitoring and the Firestore listener.
     func toggleSync() {
         isSyncPaused.toggle()
         if isSyncPaused {
@@ -82,39 +82,27 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the pull clipboard operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Re-attaches the Firestore listener to immediately fetch the latest Android clipboard.
     func pullClipboard() {
         stopListening()
         listenForAndroidClipboard()
     }
 
 
-    // Purpose: Removes clear history data from current storage/context.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func clearHistory() {
         history.removeAll()
     }
 
 
-    // Purpose: Stops monitoring flow and performs cleanup.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Cancels the polling timer.
     func stopMonitoring() {
         timer?.cancel()
         timer = nil
     }
 
 
-    // Purpose: Implements the check clipboard operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Compares the current pasteboard change count to detect new content, deduplicates,
+    /// and calls uploadClipboard if the Mac→Android direction is enabled.
     private func checkClipboard() {
         let currentChangeCount = pasteboard.changeCount
         guard currentChangeCount != lastChangeCount else { return }
@@ -154,10 +142,9 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the upload clipboard operation for this feature.
-    // Parameters: text.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Firebase Sync
+
+    /// Encrypts the given text with AES-GCM and writes it to the `clipboardItems` collection.
     private func uploadClipboard(text: String) {
         guard let pairingId = PairingManager.shared.pairingId else { return }
         let macDeviceId = DeviceManager.shared.getDeviceId()
@@ -180,10 +167,8 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the listen for android clipboard operation for this feature.
-    // Parameters: retryCount.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Attaches a Firestore snapshot listener for the most recent clipboard item from Android.
+    /// Retries up to 5 times if pairingId is not yet available.
     func listenForAndroidClipboard(retryCount: Int = 0) {
         guard let pairingId = PairingManager.shared.pairingId else {
             if retryCount < 5 {
@@ -252,10 +237,8 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Starts listener watchdog flow and required listeners.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Schedules a repeating timer that restarts the Firestore listener if no update
+    /// has been received in more than 60 seconds, guarding against silent disconnects.
     private func startListenerWatchdog() {
         watchdogTimer?.invalidate()
 
@@ -277,10 +260,7 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Stops listening flow and performs cleanup.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Removes the Firestore listener and invalidates the watchdog timer.
     func stopListening() {
         watchdogTimer?.invalidate()
         watchdogTimer = nil
@@ -290,10 +270,9 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the encrypt operation for this feature.
-    // Parameters: string.
-    // Returns: String?.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Encryption
+
+    /// AES-GCM encrypts a UTF-8 string and returns a Base64-encoded ciphertext.
     private func encrypt(_ string: String) -> String? {
         guard let data = string.data(using: .utf8) else { return nil }
 
@@ -308,10 +287,7 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the decrypt operation for this feature.
-    // Parameters: base64String.
-    // Returns: String?.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// AES-GCM decrypts a Base64-encoded ciphertext and returns the plain UTF-8 string.
     private func decrypt(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
 
@@ -327,10 +303,6 @@ class ClipboardManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the hex to data operation for this feature.
-    // Parameters: hex.
-    // Returns: Data.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func hexToData(hex: String) -> Data {
         var data = Data()
         var temp = ""

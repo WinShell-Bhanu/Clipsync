@@ -1,14 +1,14 @@
-
-
+// LandingScreen.swift
+// Welcome / onboarding screen shown when no pairing exists.
+// Displays the app logo, tagline, and a "Get Started" button that navigates
+// to QRGenScreen. Background animation can be paused while SplashScreen is visible.
 
 import Foundation
 import SwiftUI
 import AppKit
 
+// MARK: - LandingScreen
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates landing screen behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct LandingScreen: View {
 
     @State private var navigateToQR = false

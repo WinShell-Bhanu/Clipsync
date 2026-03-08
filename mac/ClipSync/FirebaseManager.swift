@@ -1,23 +1,23 @@
 
 
 
+// FirebaseManager.swift
+// Singleton that configures FirebaseApp on first access and exposes a shared
+// Firestore instance. Reads the server region from UserDefaults to select the
+// correct Firebase project via RegionConfig.
+
 import Foundation
 import FirebaseCore
 import FirebaseFirestore
 
+// MARK: - FirebaseManager
 
-// Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
-// Responsibilities: Encapsulates firebase manager behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class FirebaseManager {
     static let shared = FirebaseManager()
     let db: Firestore
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
+    /// Configures Firebase with the region-appropriate options (or default if none),
+    /// then creates a Firestore instance with in-memory caching.
     private init() {
         if FirebaseApp.app() == nil {
             let region = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
@@ -39,10 +39,6 @@ class FirebaseManager {
     }
 
 
-    // Purpose: Implements the test network connection operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func testNetworkConnection() {
         guard let url = URL(string: "https://www.google.com") else { return }
 
@@ -59,10 +55,7 @@ class FirebaseManager {
     }
 
 
-    // Purpose: Implements the collection operation for this feature.
-    // Parameters: path.
-    // Returns: CollectionReference.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Convenience accessor that returns a typed Firestore CollectionReference.
     func collection(_ path: String) -> CollectionReference {
         return db.collection(path)
     }

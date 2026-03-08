@@ -44,13 +44,14 @@
         </activity>
 
         <!-- Ghost Activity for Background Clipboard Access -->
+        <!-- taskAffinity="" isolates this in its own task so it never brings MainActivity to front -->
         <activity
             android:name=".ClipboardGhostActivity"
             android:theme="@style/Theme.Transparent.NoAnimation"
             android:excludeFromRecents="true"
-            android:launchMode="singleInstance"
-            android:windowSoftInputMode="stateUnchanged"
+            android:launchMode="singleTop"
             android:taskAffinity=""
+            android:windowSoftInputMode="stateUnchanged"
             android:exported="false" />
 
         <!-- Accessibility Service -->

@@ -64,13 +64,21 @@ import kotlinx.coroutines.launch
 import com.bunty.clipsync.R
 
 
+/**
+ * Main settings/home screen for ClipSync.
+ *
+ * Displays the paired Mac device, clipboard sync direction toggles, live system status
+ * for each required permission/service, and quick-action buttons. It also handles
+ * two modal dialogs: an in-app update prompt and a destructive "reset pairing" confirmation.
+ *
+ * @param showUpdateDialogOnStart When true the update dialog is shown immediately on first
+ *   composition, e.g. when launched from a notification deep-link.
+ * @param onRepairClick Callback invoked when the user taps the "Re-pair" button, allowing
+ *   the parent to navigate to the pairing flow.
+ * @param onResetPairing Callback invoked after a successful pairing reset so the parent can
+ *   navigate back to the onboarding screen.
+ */
 @Composable
-
-
-// Purpose: Implements the homescreen operation for this feature.
-// Parameters: See signature for parameters.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun Homescreen(
     showUpdateDialogOnStart: Boolean = false,
     onRepairClick: () -> Unit = {},
@@ -80,18 +88,26 @@ fun Homescreen(
     val configuration = LocalConfiguration.current
     val screenHeight = configuration.screenHeightDp
 
-
+    // -------------------------------------------------------------------------
+    // Responsive scaling — normalise against a 412 × 915 dp reference device so
+    // that font sizes, padding, and icon sizes look proportional on all screens.
+    // -------------------------------------------------------------------------
     val screenWidth = configuration.screenWidthDp.dp
     val widthScale = screenWidth.value / 412f
     val heightScale = screenHeight / 915f
+    // Use the smaller axis scale to avoid clipping on either dimension.
     val scale = min(widthScale, heightScale)
     val titleFontSize = (58 * scale).coerceIn(42f, 58f).sp
 
     val scope = rememberCoroutineScope()
 
+    // Fetch the saved paired Mac name once; it doesn't change during this session.
     val macDeviceName = remember { DeviceManager.getPairedMacDeviceName(context) }
 
-
+    // -------------------------------------------------------------------------
+    // Load the Roboto font family from bundled font resources so all text in this
+    // screen uses consistent typography regardless of the system font.
+    // -------------------------------------------------------------------------
     val robotoFontFamily = remember {
         FontFamily(
             Font(R.font.roboto_regular, FontWeight.Normal),
@@ -101,49 +117,65 @@ fun Homescreen(
         )
     }
 
+    // -------------------------------------------------------------------------
+    // UI visibility / animation state
+    // -------------------------------------------------------------------------
 
+    // Toggled to true after a short delay so the fade-in animation plays on first load.
     var showContent by remember { mutableStateOf(false) }
 
+    // -------------------------------------------------------------------------
+    // Permission / service status flags — each is re-evaluated on every ON_RESUME.
+    // -------------------------------------------------------------------------
 
+    // Whether the ClipboardAccessibilityService is active (required to read the clipboard).
     var isAccessibilityEnabled by remember { mutableStateOf(false) }
 
+    // Whether the app is whitelisted from battery optimisation (keeps background sync alive).
     var isBatteryUnrestricted by remember { mutableStateOf(false) }
 
+    // Whether both RECEIVE_SMS and READ_SMS permissions are granted for OTP detection.
     var isSmsPermissionGranted by remember { mutableStateOf(false) }
 
+    // Whether the app's NotificationListenerService is enabled (used for email OTP detection).
     var isNotificationListenerEnabled by remember { mutableStateOf(false) }
 
+    // -------------------------------------------------------------------------
+    // Dialog visibility state
+    // -------------------------------------------------------------------------
     var showUpdateDialog by remember { mutableStateOf(showUpdateDialogOnStart) }
     var updateInfo by remember { mutableStateOf<UpdateNotificationManager.UpdateInfo?>(null) }
 
     var showResetDialog by remember { mutableStateOf(false) }
-    val currentVersion = "1.0.0"
+    val currentVersion = "2.0.0"
 
-
+    // -------------------------------------------------------------------------
+    // Clipboard sync direction preferences — persisted via DeviceManager SharedPrefs.
+    // -------------------------------------------------------------------------
     var syncToMac by remember { mutableStateOf(DeviceManager.isSyncToMacEnabled(context)) }
     var syncFromMac by remember { mutableStateOf(DeviceManager.isSyncFromMacEnabled(context)) }
 
     val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
 
-
-    // Purpose: Implements the check permissions operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Unit unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // -------------------------------------------------------------------------
+    // Re-checks all permissions and service states every time the screen becomes
+    // visible (ON_RESUME). This catches changes the user made in system Settings
+    // while ClipSync was in the background.
+    // -------------------------------------------------------------------------
     fun checkPermissions() {
         isAccessibilityEnabled = checkServiceStatus(context, ClipboardAccessibilityService::class.java)
 
         val pm = context.getSystemService(Context.POWER_SERVICE) as PowerManager
         isBatteryUnrestricted = pm.isIgnoringBatteryOptimizations(context.packageName)
 
+        // Both READ_SMS and RECEIVE_SMS must be granted for full OTP interception.
         isSmsPermissionGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
                                  ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS) == PackageManager.PERMISSION_GRANTED
-
 
         isNotificationListenerEnabled = isNotificationServiceEnabled(context)
     }
 
-
+    // Attach a lifecycle observer so checkPermissions() is called on every resume.
     DisposableEffect(lifecycleOwner) {
         val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
             if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
@@ -156,13 +188,17 @@ fun Homescreen(
         }
     }
 
-
+    // -------------------------------------------------------------------------
+    // Initial setup: short delay before revealing content (gives the background
+    // gradient time to render), then run the first permission check and surface
+    // any update notification that was saved by UpdateNotificationManager.
+    // -------------------------------------------------------------------------
     LaunchedEffect(Unit) {
         delay(100)
         showContent = true
         checkPermissions()
 
-        // Check for pending update
+        // If a newer app version was detected in the background, show the update dialog.
         val pending = UpdateNotificationManager.getPendingUpdate(context)
         if (pending != null) {
             updateInfo = pending
@@ -170,8 +206,12 @@ fun Homescreen(
         }
     }
 
-
-    // Update Dialog
+    // =========================================================================
+    // Update available dialog
+    // Shown when UpdateNotificationManager has stored a pending update. Offers a
+    // direct "Download" button that opens the release URL in the browser, and a
+    // "Later" option that simply dismisses and clears the stored update info.
+    // =========================================================================
     if (showUpdateDialog && updateInfo != null) {
         AlertDialog(
             onDismissRequest = { 
@@ -193,6 +233,7 @@ fun Homescreen(
             confirmButton = {
                 TextButton(
                     onClick = {
+                        // Launch the browser to the release download URL, then dismiss.
                         val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
                         context.startActivity(intent)
                         showUpdateDialog = false
@@ -215,7 +256,12 @@ fun Homescreen(
         )
     }
 
-
+    // =========================================================================
+    // Reset pairing confirmation dialog
+    // This is a destructive action: it calls FirestoreManager.clearPairing() which
+    // deletes the pairing document from Firestore and navigates the user back to
+    // onboarding. Shown in red to reinforce the destructive nature of the action.
+    // =========================================================================
     if (showResetDialog) {
         AlertDialog(
             onDismissRequest = { showResetDialog = false },
@@ -228,6 +274,8 @@ fun Homescreen(
                     onClick = {
                         showResetDialog = false
 
+                        // Delete the pairing record from Firestore, then call back so the
+                        // parent composable can navigate away from this screen.
                         FirestoreManager.clearPairing(
                             context,
                             onSuccess = {
@@ -251,7 +299,13 @@ fun Homescreen(
         )
     }
 
-
+    // =========================================================================
+    // Real-time Firestore clipboard listener
+    // Subscribes to incoming clipboard updates from the paired Mac. The guard on
+    // isSyncFromMacEnabled ensures the user's preference is respected at runtime.
+    // The listener registration is automatically removed when the composable leaves
+    // the composition via onDispose.
+    // =========================================================================
     DisposableEffect(Unit) {
         val registration = FirestoreManager.listenToClipboard(context) { text ->
 
@@ -262,12 +316,16 @@ fun Homescreen(
         onDispose { registration?.remove() }
     }
 
-
+    // Animate the entire content area from fully transparent to fully opaque on first load.
     val contentAlpha by animateFloatAsState(
         targetValue = if (showContent) 1f else 0f,
         animationSpec = tween(1000)
     )
 
+    // =========================================================================
+    // Root layout: full-screen Box with horizontal padding that scales with the
+    // device width, containing a single vertically scrollable Column.
+    // =========================================================================
     Box(
         modifier = Modifier
             .fillMaxSize()
@@ -279,9 +337,10 @@ fun Homescreen(
                 .verticalScroll(rememberScrollState())
         ) {
 
+            // Top padding pushes content below any system status bar / notch area.
             Spacer(modifier = Modifier.height((72 * heightScale).dp))
 
-
+            // Large bold "Settings" title — fades in with the rest of the content.
             Text(
                 text = "Settings",
                 fontFamily = robotoFontFamily,
@@ -296,7 +355,7 @@ fun Homescreen(
 
             Spacer(modifier = Modifier.height(32.dp))
 
-
+            // All cards slide up and fade in together once showContent becomes true.
             AnimatedVisibility(
                 visible = showContent,
                 enter = fadeIn(tween(400)) + slideInVertically(initialOffsetY = { 40 }, animationSpec = tween(400))
@@ -305,7 +364,11 @@ fun Homescreen(
                     verticalArrangement = Arrangement.spacedBy((28 * scale).dp)
                 ) {
 
-
+                    // =============================================================
+                    // DEVICE SECTION
+                    // Shows the name of the currently paired Mac and a Re-pair button
+                    // that navigates back to the pairing flow without wiping data.
+                    // =============================================================
                     Column {
                         SectionHeader(text = "Device", fontFamily = robotoFontFamily, scale = scale)
 
@@ -318,6 +381,7 @@ fun Homescreen(
                                 horizontalArrangement = Arrangement.SpaceBetween
                             ) {
 
+                                // Laptop icon + "Connected to <device name>" label
                                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                                     Icon(
                                         imageVector = Icons.Default.Computer,
@@ -344,7 +408,8 @@ fun Homescreen(
                                     }
                                 }
 
-
+                                // Tapping Re-pair delegates to the parent without deleting pairing data,
+                                // allowing the user to re-scan the QR code if the connection is stale.
                                 Box(
                                     modifier = Modifier
                                         .clip(RoundedCornerShape((20 * scale).dp))
@@ -367,14 +432,18 @@ fun Homescreen(
                         }
                     }
 
-
+                    // =============================================================
+                    // PREFERENCES SECTION
+                    // Two independent toggles controlling clipboard sync direction.
+                    // Each toggle persists its state immediately via DeviceManager.
+                    // =============================================================
                     Column {
                         SectionHeader(text = "Preferences", fontFamily = robotoFontFamily, scale = scale)
 
                         InnerWhiteCard(scale = scale) {
                             Column(modifier = Modifier.padding((20 * scale).dp)) {
 
-
+                                // Send Android clipboard text up to the Mac automatically.
                                 PreferenceRow(
                                     label = "Sync to Mac",
                                     checked = syncToMac,
@@ -388,7 +457,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (12 * scale).dp), color = Color(0xFFE5E5EA))
 
-
+                                // Apply text arriving from the Mac to the local Android clipboard.
                                 PreferenceRow(
                                     label = "Sync from Mac",
                                     checked = syncFromMac,
@@ -403,13 +472,19 @@ fun Homescreen(
                         }
                     }
 
-
+                    // =============================================================
+                    // SYSTEM STATUS SECTION
+                    // Each row shows whether a required Android permission or service
+                    // is active. Tapping an inactive row opens the relevant system
+                    // settings screen so the user can grant the missing permission.
+                    // =============================================================
                     Column {
                         SectionHeader(text = "System Status", fontFamily = robotoFontFamily, scale = scale)
 
                         InnerWhiteCard(scale = scale) {
                             Column(modifier = Modifier.padding((20 * scale).dp)) {
 
+                                // Accessibility service — required to intercept clipboard changes.
                                 StatusRow(
                                     label = "Clipboard Sync",
                                     isActive = isAccessibilityEnabled,
@@ -426,7 +501,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-
+                                // Mac pairing status — derived from whether a real device name is stored.
                                 StatusRow(
                                     label = "Mac Clipboard",
                                     isActive = (macDeviceName != "Unknown Device"),
@@ -436,7 +511,8 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-
+                                // Battery optimisation whitelist — Android may kill background services
+                                // if this is not granted, interrupting clipboard sync while screen is off.
                                 StatusRow(
                                     label = "Background Sync",
                                     isActive = isBatteryUnrestricted,
@@ -459,7 +535,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-
+                                // SMS permissions — needed to read incoming OTP messages and forward them to Mac.
                                 StatusRow(
                                     label = "SMS OTP Detection",
                                     isActive = isSmsPermissionGranted,
@@ -482,7 +558,7 @@ fun Homescreen(
 
                                 HorizontalDivider(modifier = Modifier.padding(vertical = (16 * scale).dp), color = Color(0xFFE5E5EA))
 
-
+                                // Notification listener — needed to detect OTPs arriving via email apps.
                                 StatusRow(
                                     label = "Email OTP Detection",
                                     isActive = isNotificationListenerEnabled,
@@ -503,7 +579,8 @@ fun Homescreen(
                             }
                         }
 
-
+                        // If any permission is missing, show a concise warning banner below the card
+                        // to draw the user's attention without blocking the rest of the UI.
                         if (!isAccessibilityEnabled || !isBatteryUnrestricted || !isSmsPermissionGranted || !isNotificationListenerEnabled) {
                             Spacer(modifier = Modifier.height((12 * scale).dp))
                             Row(verticalAlignment = Alignment.Top) {
@@ -526,11 +603,16 @@ fun Homescreen(
                         }
                     }
 
-
+                    // =============================================================
+                    // ACTIONS SECTION
+                    // Quick-action buttons for testing and maintenance tasks. These
+                    // are primarily useful during setup or debugging.
+                    // =============================================================
                     Column {
                         SectionHeader(text = "Actions", fontFamily = robotoFontFamily, scale = scale)
 
-
+                        // Sends a fixed test string to the Mac via Firestore to verify the
+                        // cloud sync pipeline is working end-to-end.
                         ActionButton(
                             text = "Send Test Clipboard",
                             icon = Icons.Default.Share,
@@ -544,7 +626,8 @@ fun Homescreen(
 
                         Spacer(modifier = Modifier.height((16 * scale).dp))
 
-
+                        // Deletes the current clipboard value stored in Firestore so neither
+                        // device inadvertently re-applies stale content after a reconnect.
                         ActionButton(
                             text = "Clear Cloud Clipboard",
                             icon = Icons.Default.Delete,
@@ -565,7 +648,9 @@ fun Homescreen(
 
                         Spacer(modifier = Modifier.height((16 * scale).dp))
 
-
+                        // Simulates an OTP arriving on the device so the user can confirm that
+                        // the full detection → copy → Mac-forward pipeline works without needing
+                        // to wait for a real SMS or email OTP.
                         ActionButton(
                             text = "Test OTP Detection",
                             icon = Icons.Default.CheckCircle,
@@ -573,15 +658,14 @@ fun Homescreen(
                             fontFamily = robotoFontFamily,
                             scale = scale
                         ) {
-
+                            // Generate a random 6-digit code to mimic a real OTP.
                             val testOTP = (100000..999999).random().toString()
 
-
+                            // Place the OTP on the local Android clipboard (same path a real SMS would use).
                             ClipboardGhostActivity.copyToClipboard(context, testOTP)
 
-
+                            // Trigger the notification service so the Mac companion app receives the OTP.
                             OTPNotificationService.notifyOTPDetected(context, testOTP)
-
 
                             Toast.makeText(
                                 context,
@@ -592,7 +676,8 @@ fun Homescreen(
 
                         Spacer(modifier = Modifier.height((16 * scale).dp))
 
-
+                        // Opens the reset pairing confirmation dialog. The actual Firestore
+                        // deletion only happens if the user confirms in the dialog.
                         ActionButton(
                             text = "Reset Pairing",
                             icon = Icons.Default.Refresh,
@@ -606,15 +691,16 @@ fun Homescreen(
                 }
             }
 
+            // Push the version footer to the bottom of the scroll area.
             Spacer(modifier = Modifier.weight(1f))
 
-
+            // Version footer — muted style so it doesn't compete with the action content.
             Box(
                 modifier = Modifier.fillMaxWidth().padding(top = (32 * scale).dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "ClipSync v1.0.0",
+                    text = "ClipSync v2.0.0",
                     fontFamily = robotoFontFamily,
                     fontSize = (12 * scale).coerceIn(10f, 12f).sp,
                     color = Color(0xFF3C3C43).copy(alpha = 0.4f)
@@ -627,12 +713,17 @@ fun Homescreen(
 }
 
 
+/**
+ * A small section heading displayed above each card group.
+ *
+ * Uses SemiBold weight and a slightly muted grey colour to provide visual hierarchy
+ * without drawing attention away from the card content below it.
+ *
+ * @param text The heading label to display (e.g. "Device", "Preferences").
+ * @param fontFamily The Roboto [FontFamily] to apply.
+ * @param scale Responsive scale factor derived from the device screen dimensions.
+ */
 @Composable
-
-// Purpose: Implements the section header operation for this feature.
-// Parameters: text, fontFamily, scale.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun SectionHeader(text: String, fontFamily: FontFamily, scale: Float = 1f) {
     Text(
         text = text,
@@ -645,12 +736,17 @@ fun SectionHeader(text: String, fontFamily: FontFamily, scale: Float = 1f) {
 }
 
 
+/**
+ * A frosted-glass style container card used to group related settings rows.
+ *
+ * Combines a subtle drop shadow, rounded corners, a semi-transparent white
+ * background, and a thin border to produce a layered "card on background" effect
+ * that is consistent with the app's overall design language.
+ *
+ * @param scale Responsive scale factor for corner radius and shadow elevation.
+ * @param content The composable content to render inside the card.
+ */
 @Composable
-
-// Purpose: Implements the inner white card operation for this feature.
-// Parameters: scale, content.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun InnerWhiteCard(scale: Float = 1f, content: @Composable () -> Unit) {
     Box(
         modifier = Modifier
@@ -673,12 +769,19 @@ fun InnerWhiteCard(scale: Float = 1f, content: @Composable () -> Unit) {
 }
 
 
+/**
+ * A full-width row displaying a labelled toggle switch for a boolean preference.
+ *
+ * The label sits on the left and the [Switch] on the right. The switch uses iOS-
+ * inspired green/grey colours that match the overall design.
+ *
+ * @param label Human-readable name for the preference.
+ * @param checked Current toggle state.
+ * @param onCheckedChange Called with the new boolean value when the user flips the switch.
+ * @param fontFamily The Roboto [FontFamily] to use for the label.
+ * @param scale Responsive scale factor for font sizes and the switch itself.
+ */
 @Composable
-
-// Purpose: Implements the preference row operation for this feature.
-// Parameters: label, checked, onCheckedChange, fontFamily, scale.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun PreferenceRow(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit, fontFamily: FontFamily, scale: Float = 1f) {
     Row(
         modifier = Modifier.fillMaxWidth(),
@@ -708,12 +811,26 @@ fun PreferenceRow(label: String, checked: Boolean, onCheckedChange: (Boolean) ->
 }
 
 
+/**
+ * A tappable row that communicates the live status of a single system permission or service.
+ *
+ * When [isActive] is true, a green check icon and an "Active" label are shown.
+ * When [isActive] is false, a warning/error icon and a red "Fix" pill are shown, and
+ * the entire row is tappable via [onClick] so the user can jump directly to the
+ * relevant Android settings screen.
+ *
+ * The [isWarning] flag changes the inactive icon colour from red to amber — used for
+ * permissions that degrade performance (e.g. battery optimisation) rather than blocking
+ * core functionality entirely.
+ *
+ * @param label Display name for the feature being checked (e.g. "Clipboard Sync").
+ * @param isActive Whether the permission / service is currently active.
+ * @param isWarning When true and [isActive] is false, shows an amber warning instead of red error.
+ * @param fontFamily The Roboto [FontFamily] for label text.
+ * @param scale Responsive scale factor.
+ * @param onClick Called when the row is tapped; typically opens a system settings screen.
+ */
 @Composable
-
-// Purpose: Implements the status row operation for this feature.
-// Parameters: See signature for parameters.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun StatusRow(
     label: String,
     isActive: Boolean,
@@ -732,10 +849,12 @@ fun StatusRow(
             .padding(vertical = (12 * scale).dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
+        // Show a checkmark when active, a warning triangle when not.
         val icon = when {
             isActive -> Icons.Default.CheckCircle
             else -> Icons.Default.Warning
         }
+        // Green = active, amber = degraded/warning, red = blocked/missing.
         val iconColor = when {
             isActive -> Color(0xFF34C759)
             isWarning -> Color(0xFFFF9500)
@@ -766,7 +885,8 @@ fun StatusRow(
                 fontWeight = FontWeight.Medium
             )
         } else {
-
+            // "Fix" pill — the subtle red tint makes it stand out as actionable without
+            // being as alarming as a solid red background.
             Box(
                 modifier = Modifier
                     .clip(RoundedCornerShape((14 * scale).dp))
@@ -786,12 +906,21 @@ fun StatusRow(
 }
 
 
+/**
+ * A full-width pill-shaped button used for the quick-action items in the Actions section.
+ *
+ * Uses a frosted-glass style (semi-transparent white background + coloured border) rather
+ * than a solid fill, keeping the button visually lightweight against the app's gradient
+ * background. The [backgroundColor] doubles as the icon tint, border colour, and text colour.
+ *
+ * @param text Button label.
+ * @param icon Leading icon displayed to the left of the label.
+ * @param backgroundColor Brand colour for this action (drives icon, text, and border tint).
+ * @param fontFamily The Roboto [FontFamily] for the button label.
+ * @param scale Responsive scale factor for height, corner radius, and font sizes.
+ * @param onClick Called when the button is tapped.
+ */
 @Composable
-
-// Purpose: Implements the action button operation for this feature.
-// Parameters: text, icon, backgroundColor, fontFamily, scale, onClick.
-// Returns: Unit unless returned explicitly.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
 fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFamily: FontFamily, scale: Float = 1f, onClick: () -> Unit) {
     Box(
         modifier = Modifier
@@ -800,6 +929,7 @@ fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFa
             .shadow(
                 elevation = (4 * scale).dp,
                 shape = RoundedCornerShape((28 * scale).dp),
+                // Tinted shadow colour matches the button's accent colour for a cohesive glow.
                 spotColor = backgroundColor.copy(alpha = 0.2f)
             )
             .clip(RoundedCornerShape((28 * scale).dp))
@@ -835,10 +965,16 @@ fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFa
 }
 
 
-// Purpose: Implements the check service status operation for this feature.
-// Parameters: context, service.
-// Returns: Boolean.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+/**
+ * Returns true if the given accessibility [service] class is currently enabled on the device.
+ *
+ * Queries the [AccessibilityManager] for all active services and matches by class name.
+ * This is the reliable way to check service status because [Context.bindService] cannot be
+ * used for accessibility services.
+ *
+ * @param context Application or Activity context.
+ * @param service The [Class] of the accessibility service to check (e.g. [ClipboardAccessibilityService]).
+ */
 private fun checkServiceStatus(context: Context, service: Class<*>): Boolean {
     val am = context.getSystemService(Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
     val enabledServices = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_ALL_MASK)
@@ -846,10 +982,15 @@ private fun checkServiceStatus(context: Context, service: Class<*>): Boolean {
 }
 
 
-// Purpose: Evaluates whether is notification service enabled.
-// Parameters: context.
-// Returns: Boolean.
-// Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+/**
+ * Returns true if this app's [NotificationListenerService] is currently enabled.
+ *
+ * Android stores active notification listeners as a colon-separated string in
+ * [Settings.Secure]. This function checks whether the app's package name appears
+ * in that string, which is sufficient to confirm the listener is registered.
+ *
+ * @param context Application or Activity context used to read [Settings.Secure].
+ */
 private fun isNotificationServiceEnabled(context: Context): Boolean {
     val packageName = context.packageName
     val enabledListeners = Settings.Secure.getString(

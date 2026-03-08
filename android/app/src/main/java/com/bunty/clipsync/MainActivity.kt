@@ -19,6 +19,7 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -26,38 +27,47 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.compose.ui.Modifier
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 
 /**
- * MainActivity is the single Activity used by the entire ClipSync app.
+ * The sole Activity in the ClipSync Android application.
  *
- * On creation it checks whether the device is already paired with a Mac
- * ([DeviceManager.isPaired]) and directs the [NavHost] to the appropriate start destination:
- * - Paired     → "homescreen"
- * - Not paired → "landing"
+ * ClipSync is a single-Activity app built with Jetpack Compose. All navigation between screens
+ * is handled inside the Compose tree by [ClipSyncNavigation] via the Compose Navigation library,
+ * so no additional Activities or Fragments are required.
  *
- * The [MeshBackground] animated gradient is rendered once here and shared across
- * all destinations so the background doesn't flash or restart on navigation.
+ * On startup, [onCreate] determines which screen the user should land on by consulting
+ * [DeviceManager.isPaired]:
+ *  - If a pairing already exists the user is sent directly to "homescreen", skipping onboarding.
+ *  - If no pairing exists the user starts at "landing" to begin the QR-based setup flow.
+ *
+ * The animated [MeshBackground] is instantiated once inside [ClipSyncNavigation] and persists
+ * across all navigation transitions so the gradient never resets or flickers between screens.
  */
 class MainActivity : ComponentActivity() {
 
     /**
-     * Called when the Activity is first created.
-     * Sets up edge-to-edge display and inflates the Compose UI.
+     * Entry point for the Activity. Enables edge-to-edge rendering so the Compose UI can draw
+     * behind the system bars, then inflates the root Compose content with the correct start
+     * destination and any flags passed through the launching Intent.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // Decide the initial destination based on whether the user has already paired
+        // Query local device storage to decide which screen to open first.
+        // Paired users skip the onboarding flow; unpaired users start at landing.
         val isPaired = DeviceManager.isPaired(this)
         val startDestination = if (isPaired) "homescreen" else "landing"
 
-        // Register FCM token (if paired)
+        // For already-paired devices, refresh the FCM push token so the Mac can reach this
+        // device. Runs on Dispatchers.IO to avoid a network call on the main thread; the
+        // coroutine lifetime is tied to the Activity so it is cancelled on destroy.
         if (isPaired) {
-            kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            lifecycleScope.launch(Dispatchers.IO) {
                 FCMTokenManager.registerFCMToken(this@MainActivity)
             }
         }
@@ -76,21 +86,33 @@ class MainActivity : ComponentActivity() {
 }
 
 /**
- * ClipSyncNavigation defines the entire navigation graph for the app.
+ * Defines the complete Compose Navigation graph for the ClipSync application and manages
+ * the lifecycle of the [MeshBackground] animation that underlies every screen.
  *
- * All screens are rendered on top of the shared [MeshBackground] animated gradient.
- * The background animation speed is controlled here:
- * - It pulses (speeds up) briefly when the user taps "Get Started" on the landing screen.
- * - It pauses on all non-landing routes and when the app is backgrounded (saves battery).
+ * All five routes share a single [MeshBackground] instance rendered at the root of this
+ * composable so the animated gradient persists without interruption as the user navigates.
+ * The background's animation speed is governed by two boolean flags:
  *
- * Navigation routes:
- * - `landing`        → [LandingScreen]     (entry point for new users)
- * - `qrscan`         → [QRScanScreen]      (QR code scanner for pairing)
- * - `connection`     → [ConnectionPage]    (pairing success confirmation)
- * - `permission`     → [PermissionPage]    (permission onboarding)
- * - `homescreen`     → [Homescreen]        (main settings & status screen)
+ *  - [isPulsing]    : briefly set to `true` when the user taps "Get Started" on the landing
+ *                     screen, causing the background to surge at 4× speed for ~500 ms.
+ *  - [isRoutePaused]: set to `true` on every route except "landing" (with a 1 s grace period
+ *                     so that entering transitions finish before the background freezes).
+ *  - [isAppVisible] : tracks the Activity lifecycle; the animation is suspended whenever the
+ *                     app moves to the background to avoid burning CPU on invisible frames.
  *
- * @param startDestination The initial route to navigate to ("landing" or "homescreen").
+ * Routes:
+ * | Route                        | Composable         | Purpose                              |
+ * |------------------------------|--------------------|--------------------------------------|
+ * | `landing`                    | [LandingScreen]    | Welcome screen for first-time users  |
+ * | `qrscan?startCamera={bool}`  | [QRScanScreen]     | Camera-based Mac pairing via QR code |
+ * | `connection`                 | [ConnectionPage]   | Success confirmation after pairing   |
+ * | `permission`                 | [PermissionPage]   | Notification / permission onboarding |
+ * | `homescreen`                 | [Homescreen]       | Main dashboard and settings          |
+ *
+ * @param startDestination       Route name the NavHost opens first ("landing" or "homescreen").
+ *                               Determined at Activity creation time based on pairing state.
+ * @param showUpdateDialogOnStart When `true` the [Homescreen] surfaces an update prompt
+ *                               immediately after composition. Sourced from the launch Intent.
  */
 @Composable
 fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolean = false) {
@@ -98,17 +120,21 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
     val scope = rememberCoroutineScope()
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // isPulsing → briefly speeds up the MeshBackground when transitioning from landing
+    // Set to true for ~500 ms when the user taps "Get Started", triggering a speed burst in
+    // MeshBackground that adds kinetic energy to the transition into the QR scan screen.
     var isPulsing by remember { mutableStateOf(false) }
-    // isRoutePaused → freezes the background on screens where animation isn't needed
+    // Freezes the background on every route except "landing". The animation is only meaningful
+    // on the landing screen; pausing everywhere else conserves CPU and battery.
     var isRoutePaused by remember { mutableStateOf(false) }
-    // isAppVisible → pauses the background when the app is in the background
+    // Mirrors the Activity's foreground/background state. Animation pauses when the user
+    // switches away from ClipSync and resumes when the app returns to the foreground.
     var isAppVisible by remember { mutableStateOf(true) }
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
 
-    // Pause the background animation on all routes except "landing" (after a 1 s delay
-    // to let the entrance animation play first)
+    // Reacts to every navigation event. "landing" keeps the animation fully active;
+    // all other routes freeze it after a 1-second delay so entering transitions (slide-in,
+    // fade, etc.) have time to complete before the background canvas stops redrawing.
     LaunchedEffect(currentBackStackEntry?.destination?.route) {
         val route = currentBackStackEntry?.destination?.route
         if (route == "landing") {
@@ -119,7 +145,8 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
         }
     }
 
-    // Auto-reset the pulse flag after 500 ms so the background speeds up only briefly
+    // Automatically resets the pulse flag half a second after it was raised.
+    // This makes the background speed burst feel short and snappy rather than permanent.
     LaunchedEffect(isPulsing) {
         if (isPulsing) {
             delay(500)
@@ -127,7 +154,9 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
         }
     }
 
-    // Pause the background when the app leaves the foreground to save battery
+    // Observes Activity lifecycle events to pause the background when the app is not visible.
+    // The observer is attached to the LifecycleOwner and removed via onDispose to prevent
+    // a memory leak if this composable leaves the composition while the observer is still live.
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
@@ -146,8 +175,9 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
         }
     }
 
-    // MeshBackground wraps the entire NavHost so the animated gradient
-    // persists across all navigation transitions
+    // MeshBackground wraps the entire NavHost so the animated gradient layer persists across
+    // all navigation transitions without restarting. isPaused combines the route-level and
+    // app-visibility conditions so the animation stops if either signals inactivity.
     MeshBackground(
         modifier = Modifier.fillMaxSize(),
         onPulse = isPulsing,
@@ -157,20 +187,20 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
             navController = navController,
             startDestination = startDestination
         ) {
-            // ── Landing screen ─────────────────────────────────────────────
-            // Shown to first-time / unpaired users. Navigates to QR scan on tap.
+            // Welcome screen shown to first-time and unpaired users.
+            // Tapping "Get Started" triggers a brief background pulse and navigates to the QR scanner.
             composable("landing") {
                 LandingScreen(
                     onGetStartedClick = {
-                        isPulsing = true  // trigger a pulse on the background
+                        isPulsing = true
                         navController.navigate("qrscan")
                     }
                 )
             }
 
-            // ── QR Scan screen ─────────────────────────────────────────────
-            // Accepts an optional `startCamera` boolean argument so the Re-pair
-            // flow can open the camera immediately without an extra tap.
+            // QR code scanner screen used to pair the Android device with a Mac.
+            // The optional startCamera argument allows the Re-pair flow to open the camera
+            // immediately, bypassing the manual "Scan" button tap.
             composable(
                 route = "qrscan?startCamera={startCamera}",
                 arguments = listOf(navArgument("startCamera") { type = NavType.BoolType; defaultValue = false })
@@ -182,12 +212,15 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                     initialCameraActive = startCamera,
                     onQRScanned = { qrData ->
 
-                        // Parse the raw QR string into a data map (macId, fcmToken, region, etc.)
+                        // Attempt to decode the raw QR string into a structured map containing
+                        // the Mac's identifier, FCM push token, server region, and other metadata.
                         val parsedData = FirestoreManager.parseQRData(qrData)
 
                         if (parsedData != null) {
-                            // If the QR code's region differs from the detected device region,
-                            // update the stored region before creating the Firestore pairing
+                            // If the Mac's target server region differs from the region this device
+                            // was previously initialised with, update the local configuration first.
+                            // This ensures all subsequent Firestore operations hit the correct
+                            // regional database instance.
                             val qrRegion = parsedData["serverRegion"] as? String ?: "IN"
                             val initializedRegion = DeviceManager.initializedRegion
 
@@ -195,7 +228,9 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                                 DeviceManager.setTargetRegion(context, qrRegion)
                             }
 
-                            // Write the pairing data to Firestore and navigate to the confirmation screen
+                            // Write the pairing record to Firestore. On success, clear the back
+                            // stack up to and including landing so pressing Back from the
+                            // connection screen does not return the user to the QR scanner.
                             FirestoreManager.createPairing(
                                 context = context,
                                 qrData = parsedData,
@@ -214,7 +249,8 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                                 }
                             )
                         } else {
-                            // QR data couldn't be parsed – show an error and let the user try again
+                            // The scanned QR code did not contain recognisable ClipSync pairing
+                            // data. Show an error toast and return the user to the scanner to retry.
                             scope.launch {
                                 Toast.makeText(context, "Invalid QR Code", Toast.LENGTH_SHORT).show()
                                 navController.navigate("qrscan") {
@@ -226,8 +262,9 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                 )
             }
 
-            // ── Connection confirmation screen ─────────────────────────────
-            // Shown after a successful pairing. Proceeds to Permission setup.
+            // Pairing confirmation screen displayed after Firestore successfully records the link.
+            // Proceeding moves the user forward to permission setup; unpairing aborts the flow
+            // and returns to landing after clearing the locally stored pairing state.
             composable("connection") {
                 ConnectionPage(
                     onContinue = {
@@ -236,7 +273,6 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                         }
                     },
                     onUnpair = {
-                        // Clear local pairing data and go back to landing (error recovery)
                         DeviceManager.clearPairing(navController.context)
                         navController.navigate("landing") {
                             popUpTo(0) { inclusive = true }
@@ -245,7 +281,9 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                 )
             }
 
-            // ── Permission onboarding screen ───────────────────────────────
+            // Permission onboarding screen that walks the user through granting any required
+            // system permissions. Finishing setup navigates to the homescreen and removes this
+            // screen from the back stack so Back does not return here.
             composable("permission") {
                 PermissionPage(
                     onFinishSetup = {
@@ -256,19 +294,25 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                 )
             }
 
-            // ── Main settings / homescreen ─────────────────────────────────
+            // Main application dashboard showing clipboard sync status and settings.
+            // Re-pair clears the existing pairing and reopens the camera immediately with the
+            // scanner active. Reset pairing is triggered after a cloud-side wipe and returns
+            // to the landing screen, clearing the entire back stack.
             composable("homescreen") {
                 Homescreen(
                     showUpdateDialogOnStart = showUpdateDialogOnStart,
                     onRepairClick = {
-                        // Clear pairing and restart the QR scan with the camera active immediately
+                        // Erase the local pairing record and immediately open the QR scanner
+                        // with the camera active so the user can scan the new Mac QR code right away.
                         DeviceManager.clearPairing(navController.context)
                         navController.navigate("qrscan?startCamera=true") {
                             popUpTo(0) { inclusive = true }
                         }
                     },
                     onResetPairing = {
-                        // Navigate back to landing after the cloud pairing data is wiped
+                        // Called after the cloud-side pairing document has been deleted.
+                        // Navigate back to landing and wipe the entire back stack so the user
+                        // starts a fresh onboarding session from the beginning.
                         navController.navigate("landing") {
                             popUpTo(0) { inclusive = true }
                         }

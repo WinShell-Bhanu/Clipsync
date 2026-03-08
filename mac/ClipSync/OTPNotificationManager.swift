@@ -1,5 +1,7 @@
-
-
+// OTPNotificationManager.swift
+// Listens for OTP_NOTIFICATION documents in Firestore, decrypts the OTP code,
+// copies it to the clipboard, plays a sound, shows a floating bubble near the
+// menu bar icon, and fires a local UNNotification.
 
 import Foundation
 import FirebaseFirestore
@@ -8,53 +10,44 @@ import Combine
 import CryptoKit
 import UserNotifications
 
-// Purpose: Protocol for OTP notification delegate
-// Responsibilities: Defines required properties for OTP notification handling
-// Usage: Implemented by AppDelegate to provide status item reference
+// MARK: - OTPNotificationDelegate
+
+/// Provides access to the menu bar status item so the OTP bubble can anchor to it.
 protocol OTPNotificationDelegate: AnyObject {
     var statusItem: NSStatusItem? { get }
 }
 
+// MARK: - OTPNotificationManager
 
-// Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
-// Responsibilities: Encapsulates otpnotification manager behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class OTPNotificationManager: ObservableObject {
     static let shared = OTPNotificationManager()
+
+    // MARK: - Properties
+
     private var listener: ListenerRegistration?
     @Published var lastOTPCode: String? = nil
     @Published var showOTPIndicator = false
     private var lastOTPTime: Date?
 
-
     weak var delegate: OTPNotificationDelegate?
 
-
     private var currentBubbleWindow: OTPBubbleWindow?
-
 
     private var sharedSecretHex: String {
         return UserDefaults.standard.string(forKey: "encryption_key") ?? Secrets.fallbackEncryptionKey
     }
-
 
     var hasRecentOTP: Bool {
         guard let lastTime = lastOTPTime, lastOTPCode != nil else { return false }
         return Date().timeIntervalSince(lastTime) < 60
     }
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     private init() {}
 
+    // MARK: - Listening
 
-    // Purpose: Starts listening flow and required listeners.
-    // Parameters: retryCount.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Attaches a Firestore snapshot listener for new OTP_NOTIFICATION documents.
+    /// Retries up to 5 times if pairingId is not yet available.
     func startListening(retryCount: Int = 0) {
         guard let pairingId = PairingManager.shared.pairingId else {
             if retryCount < 5 {
@@ -103,10 +96,8 @@ class OTPNotificationManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the handle otpdetected operation for this feature.
-    // Parameters: otpCode.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Copies the OTP to the pasteboard, shows the bubble, plays Tink sound,
+    /// and fires a local notification.
     private func handleOTPDetected(otpCode: String) {
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
@@ -130,20 +121,16 @@ class OTPNotificationManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the reshow last bubble operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Re-shows the OTP bubble if called within 60 seconds of the last detected OTP.
     func reshowLastBubble() {
         guard let otpCode = lastOTPCode, hasRecentOTP else { return }
         pingMenuBar(with: otpCode)
     }
 
+    // MARK: - Menu Bar Animation
 
-    // Purpose: Implements the ping menu bar operation for this feature.
-    // Parameters: otpCode.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Briefly flashes the menu bar icon green, then shows the OTPBubbleWindow
+    /// anchored below the status bar button.
     private func pingMenuBar(with otpCode: String) {
         guard let appDelegate = self.delegate,
               let button = appDelegate.statusItem?.button else {
@@ -177,10 +164,7 @@ class OTPNotificationManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the animate menu bar icon operation for this feature.
-    // Parameters: button.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Runs a CAKeyframeAnimation bounce on the status bar button to draw attention.
     private func animateMenuBarIcon(button: NSStatusBarButton) {
         let animation = CAKeyframeAnimation(keyPath: "transform.scale")
         animation.values = [1.0, 1.2, 0.9, 1.1, 1.0]
@@ -196,14 +180,14 @@ class OTPNotificationManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the show notification operation for this feature.
-    // Parameters: otpCode.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Schedules a UNUserNotification with the OTP code (only if permission is granted).
     private func showNotification(otpCode: String) {
         let center = UNUserNotificationCenter.current()
-        center.requestAuthorization(options: [.alert, .sound]) { granted, _ in
-            guard granted else { return }
+        center.getNotificationSettings { settings in
+            guard settings.authorizationStatus == .authorized || settings.authorizationStatus == .provisional else {
+                return
+            }
+
             let content = UNMutableNotificationContent()
             content.title = "OTP Copied"
             content.body = "Code \(otpCode) copied from Android"
@@ -213,34 +197,28 @@ class OTPNotificationManager: ObservableObject {
                 content: content,
                 trigger: nil
             )
-            center.add(request)
+            center.add(request) { error in
+                if let error = error {
+                    print("❌ Failed to schedule OTP local notification: \(error.localizedDescription)")
+                }
+            }
         }
     }
 
 
-    // Purpose: Stops listening flow and performs cleanup.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Removes the Firestore listener.
     func stopListening() {
         listener?.remove()
         listener = nil
     }
 
-
-    // Purpose: Finalizes the instance before deallocation.
-    // Parameters: No external parameters.
-    // Returns: Void.
-    // Notes: Release observers, timers, and retained resources here.
     deinit {
         stopListening()
     }
 
+    // MARK: - Decryption
 
-    // Purpose: Implements the decrypt operation for this feature.
-    // Parameters: base64String.
-    // Returns: String?.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// AES-GCM decrypts a Base64-encoded OTP ciphertext using the shared session key.
     private func decrypt(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
 
@@ -256,10 +234,6 @@ class OTPNotificationManager: ObservableObject {
     }
 
 
-    // Purpose: Implements the hex to data operation for this feature.
-    // Parameters: hex.
-    // Returns: Data.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func hexToData(hex: String) -> Data {
         var data = Data()
         var temp = ""

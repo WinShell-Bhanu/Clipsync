@@ -1,12 +1,15 @@
+// HomeScreen.swift
+// Main settings + clipboard history screen shown after full onboarding.
+// Displays paired device info, sync-direction toggles, an encryption test card,
+// re-pair button, clipboard history list, and handles update alert presentation.
+
 import SwiftUI
 import AppKit
 import CryptoKit
 import Lottie
 
+// MARK: - HomeScreen
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates home screen behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct HomeScreen: View {
     @StateObject private var clipboardManager = ClipboardManager.shared
     @StateObject private var pairingManager = PairingManager.shared
@@ -18,12 +21,13 @@ struct HomeScreen: View {
     @State private var isTestingEncryption = false
     @State private var showEncryptionSuccess = false
     @State private var hoveredClipboardItem: UUID? = nil
-    @State private var showRepairQR = false
 
     @State private var contentOpacity: Double = 0
     @State private var contentOffset: CGFloat = 20
     @State private var tickID = UUID()
-    
+    @State private var navigateToRePair = false
+    @State private var showResetConfirm = false
+
     @State private var showUpdateAlert = false
     @State private var updateInfo: UpdateNotificationManager.UpdateInfo? = nil
 
@@ -152,56 +156,13 @@ struct HomeScreen: View {
 
 
                                     ZStack {
-
                                         RePairButton {
-                                            withAnimation(.spring(response: 0.2, dampingFraction: 0.8)) {
-                                                showRepairQR = true
-                                            }
-                                            let macDeviceId = DeviceManager.shared.getDeviceId()
-                                            pairingManager.listenForPairing(macDeviceId: macDeviceId)
-                                        }
-                                        .opacity(showRepairQR ? 0 : 1)
-
-
-                                        if showRepairQR {
-                                            InnerGlassCard {
-                                                VStack(spacing: 2) {
-                                                    if let qrImage = QRCodeGenerator.shared.qrImage {
-                                                        Image(nsImage: qrImage)
-                                                            .resizable()
-                                                            .interpolation(.none)
-                                                            .scaledToFit()
-                                                            .frame(width: 90, height: 90)
-                                                            .cornerRadius(8)
-                                                    } else {
-                                                        ProgressView()
-                                                            .frame(width: 90, height: 90)
-                                                    }
-
-                                                    Text("Scan to RePair")
-                                                        .font(.system(size: 10, weight: .medium))
-                                                        .foregroundColor(.black.opacity(0.6))
-
-                                                    Button {
-                                                        withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                                                            showRepairQR = false
-                                                        }
-                                                        pairingManager.stopListening()
-                                                    } label: {
-                                                        Text("Cancel")
-                                                            .font(.system(size: 9, weight: .semibold))
-                                                            .foregroundColor(.white)
-                                                            .padding(.horizontal, 12)
-                                                            .padding(.vertical, 2)
-                                                            .background(Capsule().fill(Color.black.opacity(0.6)))
-                                                    }
-                                                    .buttonStyle(.plain)
-                                                }
-                                                .padding(4)
-                                            }
-                                            .transition(.scale.combined(with: .opacity))
-                                            .onAppear {
-                                                QRCodeGenerator.shared.generateQRCode()
+                                            // Delete old Firestore doc, reset isPaired → false
+                                            // (AppDelegate's $isPaired sink will auto-hide menu bar)
+                                            pairingManager.clearPairing {
+                                                navigateToRePair = true
+                                            } onFailure: { _ in
+                                                navigateToRePair = true
                                             }
                                         }
                                     }
@@ -268,20 +229,41 @@ struct HomeScreen: View {
                                     }
                                 }
                                 .overlay(alignment: .bottomTrailing) {
-                                    Button {
-                                        clipboardManager.clearHistory()
-                                    } label: {
-                                        Text("Clear History")
-                                            .font(.system(size: 11, weight: .bold))
-                                            .foregroundColor(.black)
+                                    HStack(spacing: 8) {
+                                        Button {
+                                            showResetConfirm = true
+                                        } label: {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: "link.badge.minus")
+                                                    .font(.system(size: 10, weight: .bold))
+                                                Text("Reset Pairing")
+                                                    .font(.system(size: 11, weight: .bold))
+                                            }
+                                            .foregroundColor(.white)
                                             .padding(.horizontal, 12)
                                             .padding(.vertical, 6)
                                             .background(
                                                 Capsule()
-                                                    .fill(Color.white.opacity(0.7))
+                                                    .fill(Color.red.opacity(0.75))
                                             )
+                                        }
+                                        .buttonStyle(.plain)
+
+                                        Button {
+                                            clipboardManager.clearHistory()
+                                        } label: {
+                                            Text("Clear History")
+                                                .font(.system(size: 11, weight: .bold))
+                                                .foregroundColor(.black)
+                                                .padding(.horizontal, 12)
+                                                .padding(.vertical, 6)
+                                                .background(
+                                                    Capsule()
+                                                        .fill(Color.white.opacity(0.7))
+                                                )
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
                                     .padding(.trailing, 16)
                                     .padding(.bottom, 16)
                                 }
@@ -304,6 +286,12 @@ struct HomeScreen: View {
         }
         .frame(width: 590, height: 590)
         .ignoresSafeArea()
+        .navigationDestination(isPresented: Binding(
+            get: { navigateToRePair },
+            set: { if !$0 { navigateToRePair = false } }
+        )) {
+            QRGenScreen()
+        }
         .onAppear {
             tickID = UUID()
             if !clipboardManager.isSyncPaused {
@@ -322,7 +310,6 @@ struct HomeScreen: View {
             }
         }
         .onReceive(NotificationCenter.default.publisher(for: .showUpdateDialog)) { _ in
-            // Handle notification tap - show update dialog
             if let pending = UpdateNotificationManager.shared.getPendingUpdate() {
                 updateInfo = pending
                 showUpdateAlert = true
@@ -344,14 +331,22 @@ struct HomeScreen: View {
                 }
             )
         }
+        .alert("Reset Pairing?", isPresented: $showResetConfirm) {
+            Button("Reset", role: .destructive) {
+                pairingManager.clearPairing()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This will disconnect your Android device and delete all pairing data. You'll need to scan the QR code again to reconnect.")
+        }
         .enableInjection()
     }
 
 
-    // Purpose: Implements the test encryption operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Encryption Test
+
+    /// Runs a round-trip AES-GCM encrypt/decrypt test on a random string and
+    /// shows a success animation or an error message depending on the result.
     private func testEncryption() {
         isTestingEncryption = true
         encryptionTestResult = nil
@@ -380,10 +375,6 @@ struct HomeScreen: View {
     }
 
 
-    // Purpose: Implements the encrypt test string operation for this feature.
-    // Parameters: string.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func encryptTestString(_ string: String) -> String {
         guard let data = string.data(using: .utf8) else { return "" }
         let sharedSecretHex = Secrets.fallbackEncryptionKey
@@ -399,10 +390,6 @@ struct HomeScreen: View {
     }
 
 
-    // Purpose: Implements the decrypt test string operation for this feature.
-    // Parameters: base64String.
-    // Returns: String?.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func decryptTestString(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
         let sharedSecretHex = Secrets.fallbackEncryptionKey
@@ -419,10 +406,6 @@ struct HomeScreen: View {
     }
 
 
-    // Purpose: Implements the hex to data operation for this feature.
-    // Parameters: hex.
-    // Returns: Data.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func hexToData(hex: String) -> Data {
         var data = Data()
         var temp = ""
@@ -439,18 +422,13 @@ struct HomeScreen: View {
     }
 }
 
+// MARK: - Supporting Views
 
-// Purpose: Struct that models inner glass card behavior in this module.
-// Responsibilities: Encapsulates inner glass card behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Frosted-glass card container used throughout HomeScreen.
 struct InnerGlassCard<Content: View>: View {
     let content: Content
 
 
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: content.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
@@ -471,16 +449,10 @@ struct InnerGlassCard<Content: View>: View {
 }
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates tick lottie view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// NSViewRepresentable wrapper that plays the `tick` Lottie animation once.
 struct TickLottieView: NSViewRepresentable {
 
 
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
@@ -501,10 +473,6 @@ struct TickLottieView: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -513,16 +481,10 @@ struct TickLottieView: NSViewRepresentable {
 }
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates loading lottie view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// NSViewRepresentable wrapper that plays the `Loading` Lottie animation on loop.
 struct LoadingLottieView: NSViewRepresentable {
 
 
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
@@ -543,10 +505,6 @@ struct LoadingLottieView: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -555,16 +513,10 @@ struct LoadingLottieView: NSViewRepresentable {
 }
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates lock lottie view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// NSViewRepresentable wrapper that plays the `lock` Lottie animation once on appear.
 struct LockLottieView: NSViewRepresentable {
 
 
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
@@ -585,10 +537,6 @@ struct LockLottieView: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds
@@ -597,9 +545,7 @@ struct LockLottieView: NSViewRepresentable {
 }
 
 
-// Purpose: Struct that models re pair button behavior in this module.
-// Responsibilities: Encapsulates re pair button behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Compact button that triggers re-pairing; shows a QR icon on hover.
 struct RePairButton: View {
     let action: () -> Void
     @State private var isHovered = false
@@ -642,9 +588,8 @@ struct RePairButton: View {
 }
 
 
-// Purpose: Struct that models check encryption card behavior in this module.
-// Responsibilities: Encapsulates check encryption card behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Card that lets the user manually trigger an AES-GCM round-trip test to
+/// verify the shared encryption key is working correctly.
 struct CheckEncryptionCard: View {
     let encryptionTestResult: String?
     let isTestingEncryption: Bool
@@ -753,9 +698,7 @@ struct CheckEncryptionCard: View {
 }
 
 
-// Purpose: Struct that models clipboard history row behavior in this module.
-// Responsibilities: Encapsulates clipboard history row behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Single row in the clipboard history list. Content is masked until hovered.
 struct ClipboardHistoryRow: View {
     let item: ClipboardItem
     let isHovered: Bool
@@ -790,10 +733,6 @@ struct ClipboardHistoryRow: View {
     }
 
 
-    // Purpose: Implements the time ago operation for this feature.
-    // Parameters: date.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func timeAgo(from date: Date) -> String {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .full

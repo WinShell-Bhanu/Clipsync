@@ -1,12 +1,15 @@
+// QRCodeGenerator.swift
+// Generates the QR code that the Android app scans to initiate pairing.
+// The payload is a JSON object containing macId, deviceName, server region,
+// and the shared AES-256 encryption key (hex-encoded).
+
 import SwiftUI
 import CoreImage.CIFilterBuiltins
 import Combine
 import CryptoKit
 
+// MARK: - QRCodeGenerator
 
-// Purpose: Class that models qrcode generator behavior in this module.
-// Responsibilities: Encapsulates qrcode generator behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class QRCodeGenerator: ObservableObject {
     static let shared = QRCodeGenerator()
 
@@ -27,11 +30,10 @@ class QRCodeGenerator: ObservableObject {
         }
     }
 
+    // MARK: - QR Generation
 
-    // Purpose: Implements the generate qrcode operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Builds the JSON pairing payload, encodes it as a QR using CoreImage,
+    /// and scales the result to a sharp NSImage.
     func generateQRCode() {
         let macDeviceId = DeviceManager.shared.getDeviceId()
         let macName = DeviceManager.shared.getMacName()
@@ -81,10 +83,7 @@ class QRCodeGenerator: ObservableObject {
     }
 
 
-    // Purpose: Starts hex to data flow and required listeners.
-    // Parameters: hex.
-    // Returns: Data.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Converts a hex string to Data (used for key derivation).
     private func startHexToData(hex: String) -> Data {
         var data = Data()
         var temp = ""
@@ -101,10 +100,7 @@ class QRCodeGenerator: ObservableObject {
     }
 
 
-    // Purpose: Implements the generate random hex key operation for this feature.
-    // Parameters: No parameters.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Generates a cryptographically random 256-bit key as a hex string via SecRandomCopyBytes.
     private func generateRandomHexKey() -> String {
         var bytes = [UInt8](repeating: 0, count: 32)
         let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)

@@ -1,13 +1,13 @@
-
-
+// MenuBarView.swift
+// Popover content shown when the user clicks the menu bar icon.
+// Shows connection status, last sync time, Send/Pull action buttons, and footer
+// actions. Re-pair flow: biometric auth → clearPairing → inline QR code.
 
 import SwiftUI
 import LocalAuthentication
 
+// MARK: - MenuBarView
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates menu bar view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct MenuBarView: View {
     @Environment(\.openWindow) var openWindow
     @StateObject private var pairingManager = PairingManager.shared
@@ -177,11 +177,15 @@ struct MenuBarView: View {
     }
 
 
+    // MARK: - Computed Properties
+
+    /// Returns green when syncing, orange when paused, secondary when unpaired.
     var connectionStatusColor: Color {
         if !pairingManager.isPaired { return .secondary }
         return clipboardManager.isSyncPaused ? .orange : .green
     }
 
+    /// Relative time string from the last successful clipboard sync.
     var lastSyncedText: String {
         guard let date = clipboardManager.lastSyncedTime else { return "Ready to sync" }
         let formatter = RelativeDateTimeFormatter()
@@ -189,11 +193,10 @@ struct MenuBarView: View {
         return "Synced " + formatter.localizedString(for: date, relativeTo: Date())
     }
 
+    // MARK: - Actions
 
-    // Purpose: Implements the authenticate user operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Prompts Touch ID / password before initiating the clearPairing flow.
+    /// Falls back to clearing directly if biometrics are unavailable.
     func authenticateUser() {
         if isAuthenticating { return }
         isAuthenticating = true
@@ -239,9 +242,9 @@ struct MenuBarView: View {
 }
 
 
-// Purpose: Struct that models menu action button behavior in this module.
-// Responsibilities: Encapsulates menu action button behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+// MARK: - Supporting Views
+
+/// Reusable icon + label tile used in the Send/Pull action grid.
 struct MenuActionButton: View {
     let title: String
     let icon: String
@@ -273,17 +276,11 @@ struct MenuActionButton: View {
 }
 
 
-// Purpose: Struct that models footer label style behavior in this module.
-// Responsibilities: Encapsulates footer label style behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Compact icon + label style used in the footer action buttons.
 struct FooterLabelStyle: LabelStyle {
     var isDestructive: Bool = false
 
 
-    // Purpose: Implements the make body operation for this feature.
-    // Parameters: configuration.
-    // Returns: some View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeBody(configuration: Configuration) -> some View {
         HStack(spacing: 4) {
             configuration.icon
@@ -299,18 +296,12 @@ struct FooterLabelStyle: LabelStyle {
 }
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates effect view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// NSViewRepresentable wrapper for NSVisualEffectView to provide vibrancy backgrounds.
 struct EffectView: NSViewRepresentable {
     var material: NSVisualEffectView.Material
     var blendingMode: NSVisualEffectView.BlendingMode
 
 
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSVisualEffectView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSVisualEffectView {
         let view = NSVisualEffectView()
         view.material = material
@@ -320,10 +311,6 @@ struct EffectView: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {
         nsView.material = material
         nsView.blendingMode = blendingMode

@@ -1,12 +1,15 @@
 
 
 
+// ContentView.swift
+// Root routing view. Directs to LandingScreen (unpaired), ConnectedScreen (paired +
+// setup incomplete), or HomeScreen (fully set up). Shows a SplashScreen overlay for
+// 4 seconds on first launch while pairing has not yet occurred.
+
 import SwiftUI
 
+// MARK: - ContentView
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates content view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct ContentView: View {
     @StateObject private var pairingManager = PairingManager.shared
 

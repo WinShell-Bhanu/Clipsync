@@ -37,17 +37,38 @@ import kotlinx.coroutines.delay
 import kotlin.math.min
 
 /**
- * LandingScreen is the first screen shown to users who have NOT yet paired a Mac.
+ * LandingScreen is the entry point shown to users who have not yet paired their Android
+ * device with a Mac instance of ClipSync. It is displayed when no active pairing record
+ * exists in local storage.
  *
- * It animates in three layers sequentially:
- * 1. [ClipSyncTitle]   – the large "ClipSync" heading
- * 2. [SubtitleSection] – the gradient tagline beneath the title
- * 3. [GlassmorphismCard] – the bottom card with the logo, feature highlights, and "Get Started" button
+ * The screen is composed of three independently gated [AnimatedVisibility] layers that
+ * reveal themselves in a deliberate staggered sequence the moment the composable enters
+ * the composition:
+ *  1. [ClipSyncTitle]     – the large "ClipSync" wordmark fades in and slides down from
+ *                           100 px above its resting position.
+ *  2. [SubtitleSection]   – the gradient "ReImagined the Apple Way" tagline fades in and
+ *                           slides in from 100 px to the left, building visual hierarchy
+ *                           directly beneath the title.
+ *  3. [GlassmorphismCard] – the frosted-glass bottom card springs up from 200 px below;
+ *                           it houses the animated SVG app logo, two feature-highlight
+ *                           columns, and the primary "Get Started" CTA button.
  *
- * On first launch it also auto-detects the user's region via [LocationHelper] and
- * stores it in [DeviceManager] so the correct Firestore region is used later.
+ * On the very first app launch the composable also performs silent IP-based region
+ * detection via [LocationHelper.detectCountryCode]. The returned ISO 3166-1 alpha-2
+ * country code is mapped to either the `"US"` or `"IN"` Firestore data region and
+ * persisted through [DeviceManager] so all subsequent cloud writes are routed to the
+ * geographically nearest Firestore cluster. The detection is skipped when a region
+ * value has already been saved.
  *
- * @param onGetStartedClick Called after the exit animation finishes when the user taps "Get Started".
+ * Tapping "Get Started" triggers a two-phase animated exit sequence:
+ *  - Phase 1: the button squishes to 80 % of its size in 100 ms, then springs back to
+ *    full scale with a medium-bouncy spring for satisfying tactile feedback.
+ *  - Phase 2: after a brief pause the entire screen simultaneously fades out and scales
+ *    down to 0.9×; once the animation completes, [onGetStartedClick] is invoked.
+ *
+ * @param onGetStartedClick Invoked after the screen-exit animation has fully completed.
+ *                          The caller is responsible for navigating to the next screen,
+ *                          which is typically the permission-onboarding flow.
  */
 @Composable
 fun LandingScreen(
@@ -58,30 +79,40 @@ fun LandingScreen(
     val screenWidth = configuration.screenWidthDp.dp
     val screenHeight = configuration.screenHeightDp.dp
 
-    // Scale factors relative to the 412×915 design reference — keeps layout proportional on all devices
+    // Derive independent width and height scale factors against the 412×915 dp design
+    // reference canvas. Taking the smaller of the two preserves the intended visual
+    // proportions on devices with very tall or very wide display aspect ratios.
     val widthScale = screenWidth.value / 412f
     val heightScale = screenHeight.value / 915f
     val scale = min(widthScale, heightScale)
 
-    // isExiting drives the fade+scale-out transition before navigating away
+    // When flipped to true, the outer AnimatedVisibility plays the fade+shrink exit
+    // spec on the entire screen, creating a seamless transition to the next route.
     var isExiting by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    // buttonScale is animated on tap to give a satisfying "press" feel
+
+    // Animatable whose current value is forwarded to GlassmorphismCard as `buttonScale`.
+    // It is driven programmatically on tap to produce the squish-and-bounce press effect.
     val buttonScale = remember { Animatable(1f) }
 
-    // Visibility flags for the staggered entrance animations
+    // Boolean gates for each of the three entrance layers. They are set to true in
+    // sequence inside LaunchedEffect with deliberate inter-layer delays to create the
+    // cascading stagger reveal.
     var showTitle by remember { mutableStateOf(false) }
     var showSubtitle by remember { mutableStateOf(false) }
     var showCard by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     LaunchedEffect(Unit) {
-        // Auto-detect country code and map it to a Firestore region (US or IN)
-        // only if a region hasn't been set before
+        // One-time IP geolocation to select the nearest Firestore data region.
+        // DeviceManager persists the result in SharedPreferences, so this network
+        // call only happens on the very first launch. An unresolvable country code
+        // falls back to "IN" (India region).
         if (!DeviceManager.isRegionSet(context)) {
             val countryCode = LocationHelper.detectCountryCode() ?: "IN"
 
-            // Countries served by the US Firestore region
+            // Countries whose traffic should be routed to the US-based Firestore region,
+            // covering North America and the major EU member states.
             val euCountries = setOf("ES", "FR", "DE", "IT", "UK", "GB", "NL", "BE", "SE", "NO", "DK", "FI", "IE", "PT", "GR", "AT", "CH", "PL", "CZ", "HU", "RO")
 
             if (countryCode in listOf("US", "CA", "MX") || countryCode in euCountries) {
@@ -91,7 +122,8 @@ fun LandingScreen(
             }
         }
 
-        // Staggered entrance: title → subtitle → bottom card
+        // Stagger the three entrance layers with 200 ms gaps so each element arrives
+        // with a perceptible delay, producing a polished top-down cascading reveal.
         delay(100)
         showTitle = true
         delay(200)
@@ -100,8 +132,9 @@ fun LandingScreen(
         showCard = true
     }
 
-    // Wrap everything in an AnimatedVisibility so the whole screen can fade+scale out
-    // before the navigation callback fires
+    // The outermost AnimatedVisibility wraps the entire screen so that toggling
+    // `isExiting` to true simultaneously fades and shrinks the whole UI before
+    // the navigation callback is invoked, keeping the transition smooth.
     androidx.compose.animation.AnimatedVisibility(
         visible = !isExiting,
         exit = androidx.compose.animation.fadeOut(animationSpec = tween(300)) +
@@ -109,7 +142,7 @@ fun LandingScreen(
     ) {
         Box(modifier = Modifier.fillMaxSize()) {
 
-            // Layer 1: large "ClipSync" title slides in from the top
+            // Layer 1 – wordmark: fades in over 800 ms while sliding down from 100 px above.
             androidx.compose.animation.AnimatedVisibility(
                 visible = showTitle,
                 enter = androidx.compose.animation.fadeIn(tween(800)) +
@@ -118,7 +151,7 @@ fun LandingScreen(
                 ClipSyncTitle()
             }
 
-            // Layer 2: gradient subtitle slides in from the left
+            // Layer 2 – tagline: fades in over 800 ms while sliding in from 100 px to the left.
             androidx.compose.animation.AnimatedVisibility(
                 visible = showSubtitle,
                 enter = androidx.compose.animation.fadeIn(tween(800)) +
@@ -127,7 +160,7 @@ fun LandingScreen(
                 SubtitleSection()
             }
 
-            // Layer 3: glassmorphism card slides up from the bottom
+            // Layer 3 – bottom card: fades in over 800 ms while sliding up from 200 px below.
             androidx.compose.animation.AnimatedVisibility(
                 visible = showCard,
                 enter = androidx.compose.animation.fadeIn(tween(800)) +
@@ -137,7 +170,8 @@ fun LandingScreen(
                     buttonScale = buttonScale.value,
                     onGetStartedClick = {
                         scope.launch {
-                            // Animate button press: squish down then spring back up
+                            // Phase 1: compress the button to 80 % in 100 ms, then spring
+                            // it back to full scale with a medium-bouncy feel.
                             buttonScale.animateTo(0.8f, animationSpec = tween(100))
                             buttonScale.animateTo(
                                 1f,
@@ -147,10 +181,12 @@ fun LandingScreen(
                                 )
                             )
 
-                            // Short pause, then trigger exit animation before navigating
+                            // Phase 2: brief pause so the bounce completes visually, then
+                            // flip `isExiting` to trigger the full-screen fade+shrink exit.
                             delay(100)
                             isExiting = true
 
+                            // Wait for the 300 ms exit animation to finish before navigating.
                             delay(300)
                             onGetStartedClick()
                         }
@@ -162,13 +198,23 @@ fun LandingScreen(
 }
 
 /**
- * Renders the "ClipSync" heading at the top of the landing screen.
+ * Renders the large "ClipSync" wordmark at the top of the landing screen.
  *
- * Uses a two-layer technique for a depth effect:
- * - A blurred (or low-alpha on older APIs) shadow copy behind the main text.
- * - A solid white foreground copy on top.
+ * A two-layer painting technique is used to create a convincing sense of depth and
+ * dimensionality without a real drop-shadow drawable:
  *
- * Font size and top padding are responsive to the current screen height.
+ *  - **Shadow layer** (behind): the same "ClipSync" text is drawn in black at 25 %
+ *    opacity, shifted 12 px downward. On API 31+ (Android 12) a real hardware-accelerated
+ *    [RenderEffect] Gaussian blur (σ = 25) is applied to this layer, making the shadow
+ *    soft and diffused. On older devices, where [RenderEffect] is unavailable, the alpha
+ *    is simply reduced to 10 % to hint at the shadow without blurring.
+ *
+ *  - **Foreground layer** (in front): the same text in solid white, drawn at the natural
+ *    position, sits on top of the blurred shadow and reads as a clean, embossed headline.
+ *
+ * Both the font size and the top padding are calculated as a proportion of the device's
+ * physical screen height relative to the 915 dp reference, so the title scales gracefully
+ * across compact and large-screen form factors without hard-coded breakpoints.
  */
 @Composable
 fun ClipSyncTitle() {
@@ -184,7 +230,9 @@ fun ClipSyncTitle() {
             .padding(top = topPadding),
         contentAlignment = Alignment.Center
     ) {
-        // Shadow / blur layer — creates an embossed depth effect behind the title
+        // Shadow layer: rendered below and slightly offset from the foreground text.
+        // On API 31+ a hardware-accelerated Gaussian blur softens its edges; on older
+        // devices the alpha is simply lowered to preserve a subtle shadow hint.
         Text(
             text = "ClipSync",
             fontSize = titleFontSize,
@@ -199,7 +247,8 @@ fun ClipSyncTitle() {
                 .offset(y = (12 * heightScale).dp)
                 .graphicsLayer {
                     if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-                        // API 31+: use a real RenderEffect Gaussian blur for the shadow
+                        // API 31+: apply a hardware-accelerated RenderEffect Gaussian blur
+                        // with σ = 25 and DECAL tile mode to create a realistic soft shadow.
                         renderEffect = RenderEffect
                             .createBlurEffect(
                                 25f, 25f,
@@ -207,13 +256,15 @@ fun ClipSyncTitle() {
                             )
                             .asComposeRenderEffect()
                     } else {
-                        // Fallback for older devices: just reduce the alpha
+                        // Pre-API 31 fallback: reduce alpha to 10 % to approximate the
+                        // depth effect without hardware-accelerated blur support.
                         alpha = 0.1f
                     }
                 }
         )
 
-        // Foreground text — solid white, rendered above the blurred shadow layer
+        // Foreground layer: solid white text rendered at the natural (non-offset) position,
+        // sitting visually on top of the blurred shadow to complete the embossed effect.
         Text(
             text = "ClipSync",
             fontSize = titleFontSize,
@@ -228,12 +279,19 @@ fun ClipSyncTitle() {
 }
 
 /**
- * Renders the gradient tagline "ReImagined the Apple Way" beneath the title.
+ * Renders the gradient tagline "ReImagined the Apple Way" directly beneath the
+ * [ClipSyncTitle] wordmark on the landing screen.
  *
- * The text uses a linear gradient brush from a teal-blue to a deep purple,
- * giving it the "Apple aesthetic" look that matches the app's brand.
+ * Rather than a flat colour, the text is painted with a [Brush.linearGradient] running
+ * diagonally from `Offset.Zero` (top-left) to `Offset.Infinite` (bottom-right). The
+ * two colour stops transition from a teal-blue (`#4A889D`) to a deep indigo-purple
+ * (`#500CFF`), evoking the clean, premium aesthetic that the brand name references.
  *
- * Font size and top padding are responsive to the current screen height.
+ * Both the font size (clamped between 18 sp and 28 sp) and the top padding are derived
+ * from the device's physical screen height relative to the 915 dp reference height, so
+ * the tagline stays proportionally positioned beneath the title on all screen sizes.
+ * `TextOverflow.Visible` ensures the text is never clipped even if the gradient brush
+ * extends slightly beyond the measured text bounds.
  */
 @Composable
 fun SubtitleSection() {
@@ -257,7 +315,8 @@ fun SubtitleSection() {
             fontFamily = FontFamily(Font(R.font.roboto_medium)),
             modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
             textAlign = TextAlign.Center,
-            // Gradient brush: teal-blue → deep purple
+            // Diagonal gradient from teal-blue (#4A889D) to deep indigo-purple (#500CFF),
+            // giving the tagline its distinctive premium, Apple-inspired colour treatment.
             style = TextStyle(
                 brush = Brush.linearGradient(
                     colors = listOf(
@@ -275,18 +334,40 @@ fun SubtitleSection() {
 }
 
 /**
- * The main bottom card on the landing screen.
+ * GlassmorphismCard is the dominant visual element on the landing screen — a large,
+ * rounded frosted-glass card that occupies the bottom 63 % of the screen height.
  *
- * Contains three visual layers stacked inside a Box:
- * 1. A rounded glassmorphism card background (gradient fill + clip).
- * 2. A [feature highlights card][featureCard] showing "No Sign-up Required" and "Your clipboard stays private".
- * 3. The animated app logo loaded from the assets SVG.
- * 4. The [GetStartedButton] positioned below the feature card.
+ * The card is built from four visually distinct layers stacked inside a [Box]:
  *
- * All dimensions scale proportionally to the current device screen size.
+ *  1. **Card background** – a horizontally swept linear gradient from indigo-blue
+ *     (`#6F7EF0`) to soft lavender-purple (`#8568A6`), both at 30 % opacity, clipped
+ *     to a rounded rectangle. The near-transparent fill creates the glassmorphism look.
  *
- * @param buttonScale       Current scale value of the button (driven by press animation).
- * @param onGetStartedClick Callback fired when the user taps the "Get Started" button.
+ *  2. **Animated app logo** – the SVG logo stored in `assets/Logo.svg` is loaded
+ *     by Coil with [SvgDecoder] and simultaneously scales in from 0 → 1 and fades
+ *     from 0 → 1 via two independent [Animatable] instances over 800 ms. Using
+ *     separate animatables lets the scale and alpha timings be tuned independently
+ *     in the future without coupling them to a single [AnimatedVisibility].
+ *
+ *  3. **Feature highlights inner card** – a smaller pill-shaped card (50 % white
+ *     alpha, no elevation) positioned below the logo. It contains two equal-weight
+ *     columns in a [Row]:
+ *      - Left column: a key icon + "No Sign up Required" label.
+ *      - Right column: a shield icon + "Your clipboard stays private" label.
+ *
+ *  4. **[GetStartedButton]** – the primary CTA, positioned below the feature card.
+ *     Its rendered scale is driven by [buttonScale], which is animated externally
+ *     by [LandingScreen] to produce the press feedback effect.
+ *
+ * All metric values (card height, logo size, feature card size, button offset, font
+ * sizes, corner radii, icon sizes) are calculated proportionally against the 412×915 dp
+ * design reference and clamped to a minimum so no element becomes unusably small on
+ * compact displays.
+ *
+ * @param buttonScale       The current scale factor for the "Get Started" button,
+ *                          driven by the press animation in [LandingScreen].
+ * @param onGetStartedClick Forwarded directly to [GetStartedButton]; invoked when the
+ *                          user taps the primary CTA.
  */
 @Composable
 fun GlassmorphismCard(
@@ -300,22 +381,22 @@ fun GlassmorphismCard(
     val heightScale = screenHeight.value / 915f
     val scale = min(widthScale, heightScale)
 
-    // Card position and size
+    // Outer card geometry: starts 338 dp from the top and fills 63 % of screen height.
     val cardTopPadding = (338 * heightScale).dp
     val cardHeight = (screenHeight.value * 0.63f).dp
     val cornerRadius = (28 * scale).coerceIn(20f, 28f).dp
 
-    // App logo size and vertical offset inside the card
+    // Logo dimensions and its vertical offset from the top of the card interior.
     val logoWidth = (201 * scale).coerceIn(140f, 201f).dp
     val logoHeight = (190 * scale).coerceIn(130f, 190f).dp
     val logoOffsetY = (27 * heightScale).dp
 
-    // Feature highlight card (the pill-shaped inner card with two columns)
+    // Feature highlights card: full-width (85 % of screen), positioned directly below the logo.
     val featureCardWidth = (screenWidth.value * 0.85f).dp
     val featureCardHeight = (104 * scale).coerceIn(5f, 104f).dp
     val featureCardOffsetY = (logoHeight.value + logoOffsetY.value + 50 * heightScale).dp
 
-    // "Get Started" button position
+    // "Get Started" button: offset derived from the bottom edge of the feature card.
     val buttonOffsetY = (featureCardOffsetY.value + featureCardHeight.value + 60 * heightScale).dp
 
     val featureFontSize = (16 * scale).coerceIn(12f, 16f).sp
@@ -339,7 +420,9 @@ fun GlassmorphismCard(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
-                        // Horizontal gradient from indigo-blue to soft purple (both at 30% opacity)
+                        // Horizontal linear gradient swept left-to-right across the full card
+                        // width, blending indigo-blue into lavender-purple at 30 % opacity to
+                        // achieve the frosted-glass translucency that defines the card's look.
                         brush = Brush.linearGradient(
                             colors = listOf(
                                 Color(0xFF6F7EF0).copy(alpha = 0.3f),
@@ -353,10 +436,11 @@ fun GlassmorphismCard(
                     .clip(RoundedCornerShape(cornerRadius))
             ) {
 
-                // ── Feature highlights card ───────────────────────────────────
-                // A semi-transparent white inner card with two columns:
-                // Left:  key icon + "No Sign up Required"
-                // Right: shield icon + "Your clipboard stays private"
+                // ── Feature highlights card ───────────────────────────────────────────────
+                // A pill-shaped inner card (50 % white alpha, zero elevation) housing two
+                // equal columns that communicate the app's core value propositions:
+                //   Left column  – key icon + "No Sign up Required"
+                //   Right column – shield icon + "Your clipboard stays private"
                 Card(
                     modifier = Modifier
                         .width(featureCardWidth)
@@ -376,7 +460,7 @@ fun GlassmorphismCard(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
 
-                        // Left feature column: no sign-up
+                        // Left column: key icon communicates zero-account, privacy-first onboarding.
                         Column(
                             modifier = Modifier
                                 .weight(1f),
@@ -404,7 +488,8 @@ fun GlassmorphismCard(
 
                         Spacer(modifier = Modifier.width((16 * scale).dp))
 
-                        // Right feature column: privacy
+                        // Right column: shield icon reinforces that clipboard data is end-to-end
+                        // private and never logged or stored on a third-party server.
                         Column(
                             modifier = Modifier.weight(1f),
                             horizontalAlignment = Alignment.CenterHorizontally,
@@ -431,9 +516,11 @@ fun GlassmorphismCard(
                     }
                 }
 
-                // ── Animated logo ─────────────────────────────────────────────
-                // The SVG logo fades and scales in from zero using two separate Animatables
-                // so scale and alpha can be independently controlled if needed.
+                // ── Animated app logo ─────────────────────────────────────────────────────
+                // Two separate Animatables control the scale and alpha independently. Both
+                // animate from 0 → 1 over 800 ms so the logo grows and fades in together.
+                // Keeping them separate allows future fine-tuning of timing or easing for
+                // each property without entangling them in a single AnimatedVisibility.
                 val logoScaleAnim = remember { Animatable(0f) }
                 val logoAlpha = remember { Animatable(0f) }
 
@@ -451,7 +538,9 @@ fun GlassmorphismCard(
                     )
                 }
 
-                // Loaded from assets as an SVG via Coil + SvgDecoder
+                // The SVG logo is decoded at runtime by Coil's SvgDecoder from the bundled
+                // asset file. Using AsyncImage + SvgDecoder ensures the vector renders
+                // crisply at any density without needing separate raster drawables.
                 AsyncImage(
                     model = ImageRequest.Builder(LocalContext.current)
                         .data("file:///android_asset/Logo.svg")
@@ -469,7 +558,9 @@ fun GlassmorphismCard(
                         }
                 )
 
-                // ── Get Started button ────────────────────────────────────────
+                // ── Primary CTA button ────────────────────────────────────────────────────
+                // Positioned directly below the feature card. The `scale` parameter forwards
+                // the animated press value from LandingScreen for the squish feedback.
                 GetStartedButton(
                     scale = buttonScale,
                     onClick = onGetStartedClick,
@@ -483,14 +574,31 @@ fun GlassmorphismCard(
 }
 
 /**
- * The primary CTA button on the landing screen.
+ * GetStartedButton is the primary call-to-action pill button displayed inside
+ * [GlassmorphismCard] at the bottom of the landing screen.
  *
- * Styled as a semi-transparent pill with a white border (glassmorphism).
- * The button size, font, and corner radius all scale with screen density.
+ * **Visual design** – the button is styled as a semi-transparent frosted-glass pill:
+ * a 20 %-opaque white fill with a solid 1 dp white border and zero elevation, so it
+ * blends naturally into the translucent card behind it while still reading as a distinct
+ * tappable element. The "Get Started" label is rendered in a deep blue (`#1061AC`) with
+ * tight negative letter-spacing to match the rest of the screen's typography.
  *
- * @param modifier  Optional [Modifier] for positioning (e.g. used inside a [Box] with [Alignment]).
- * @param scale     Current scale value used by the press animation in [LandingScreen].
- * @param onClick   Called when the user taps the button.
+ * **Responsive sizing** – all metric values (width, height, font size, corner radius) are
+ * calculated by multiplying design-canvas constants by the unified [sizeScale] factor and
+ * then clamping to a `(min, max)` range. This ensures the button remains comfortably
+ * tappable on small phones and never becomes oversized on large tablets.
+ *
+ * **Press animation** – the [scale] parameter is forwarded directly to the [Button]'s
+ * `graphicsLayer` transform. Its value is driven externally by the [Animatable] in
+ * [LandingScreen], producing a squish-to-80%-then-bounce-back effect on tap without any
+ * additional state or coroutine inside this composable.
+ *
+ * @param modifier  Optional [Modifier] used by the caller to position the button within
+ *                  a [Box] (e.g. `Modifier.align(Alignment.TopCenter).offset(y = …)`).
+ * @param scale     The current animated scale factor (0 < scale ≤ 1) applied uniformly
+ *                  to both `scaleX` and `scaleY` for the press feedback effect.
+ * @param onClick   Invoked when the user taps the button; the caller is responsible for
+ *                  initiating the exit animation and subsequent navigation.
  */
 @Composable
 fun GetStartedButton(
@@ -503,7 +611,8 @@ fun GetStartedButton(
     val screenHeight = configuration.screenHeightDp.dp
     val sizeScale = min(screenWidth.value / 412f, screenHeight.value / 915f)
 
-    // All dimensions clamp to a min/max range so the button stays usable on very small or large screens
+    // Each dimension is scaled from the design-canvas baseline and clamped so the
+    // button stays well within usable bounds on every supported device size.
     val buttonWidth = (180 * sizeScale).coerceIn(160f, 180f).dp
     val buttonHeight = (59 * sizeScale).coerceIn(48f, 59f).dp
     val fontSize = (26 * sizeScale).coerceIn(20f, 26f).sp
@@ -513,7 +622,8 @@ fun GetStartedButton(
         onClick = onClick,
         modifier = modifier
             .size(width = buttonWidth, height = buttonHeight)
-            // Apply the press scale animation driven by the parent composable
+            // Forward the externally driven scale value to graphicsLayer so the press
+            // animation is applied uniformly to both axes without recomposing the button.
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -522,7 +632,7 @@ fun GetStartedButton(
         border = BorderStroke(1.dp, Color.White),
         contentPadding = PaddingValues(horizontal = 8.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = Color.White.copy(alpha = 0.2f)  // frosted glass look
+            containerColor = Color.White.copy(alpha = 0.2f)  // 20 % white fill for the frosted-glass look
         ),
         elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
     ) {

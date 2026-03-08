@@ -6,23 +6,32 @@ import android.os.Build
 import java.util.UUID
 
 /**
- * DeviceManager is the single source of truth for all device-level state in ClipSync.
+ * DeviceManager is the single source of truth for all device-level and pairing-level
+ * persistent state in ClipSync.
  *
- * It persists data in a private [SharedPreferences] file (`clipsync_prefs`) and exposes
- * typed getters/setters so the rest of the codebase never accesses SharedPreferences directly.
+ * All data is stored in a private [SharedPreferences] file named `clipsync_prefs` so
+ * that the rest of the codebase never accesses [SharedPreferences] directly. Typed
+ * getters and setters are exposed for every logical domain.
  *
- * **Responsibilities:**
- * - Generating and persisting a stable device ID (UUID + model name).
- * - Storing and reading the pairing state (paired/unpaired, paired Mac details).
- * - Persisting sync direction toggles (to Mac / from Mac).
- * - Managing the target Firestore region (IN or US).
- * - Storing the per-session AES encryption key exchanged during pairing.
+ * **Domains managed by this object:**
+ * - **Device identity** — A stable UUID-based device ID and a human-readable device name,
+ *   both generated once on first launch and persisted forever.
+ * - **Pairing state** — Whether the device is paired, the paired Mac's ID and display name,
+ *   and the Firestore document ID of the active pairing record.
+ * - **Sync direction toggles** — Independent boolean flags controlling whether clipboard
+ *   content flows from Android → Mac and/or Mac → Android.
+ * - **Firestore region** — The target Firebase project region (`"IN"` or `"US"`) selected
+ *   based on the user's physical location or the Mac's QR code.
+ * - **AES encryption key** — The 64-character hex session key exchanged during pairing,
+ *   used by [FirestoreManager] to encrypt and decrypt all clipboard content.
  */
 object DeviceManager {
 
     private const val PREFS_NAME = "clipsync_prefs"
 
-    // ── SharedPreferences keys ────────────────────────────────────────────────
+    // Keys used to read and write individual values inside the clipsync_prefs file.
+    // Each key is a stable string constant — changing any key is a breaking change that
+    // would cause existing installs to lose their persisted data.
     private const val KEY_PAIRED             = "is_paired"
     private const val KEY_PAIRED_DEVICE_ID   = "paired_device_id"
     private const val KEY_PAIRED_DEVICE_NAME = "paired_device_name"
@@ -35,39 +44,47 @@ object DeviceManager {
     private const val KEY_REGION             = "server_region"
 
     /**
-     * The Firestore region that was active when Firebase was initialised in [ClipSyncApp].
-     * Used by [FirestoreManager] to detect region mismatches after a QR scan.
-     * Defaults to `"IN"` (India).
+     * Stores the Firestore region that was active when Firebase was initialised in
+     * [ClipSyncApp]. [FirestoreManager] reads this value to detect whether a freshly
+     * scanned QR code requests a different region, which would require an app restart
+     * to switch Firebase instances. Defaults to `"IN"` (India).
      */
     var initializedRegion: String = "IN"
 
     // ── Region helpers ────────────────────────────────────────────────────────
 
     /**
-     * Returns the persisted Firestore target region (`"IN"` or `"US"`).
-     * Defaults to `"IN"` if not yet set.
+     * Returns the persisted Firestore target region code (`"IN"` or `"US"`).
+     * Defaults to `"IN"` if no region has been saved yet (e.g. on first launch before
+     * [LocationHelper] has determined the user's location).
      */
     fun getTargetRegion(context: Context): String =
         getPrefs(context).getString(KEY_REGION, "IN") ?: "IN"
 
     /**
-     * Returns `true` if a target region has already been stored (set on first launch
-     * via [LocationHelper]).
+     * Returns `true` if a target region has already been saved to [SharedPreferences].
+     *
+     * Used by [ClipSyncApp] and [LocationHelper] to determine whether the region-selection
+     * step should be skipped on subsequent launches.
      */
     fun isRegionSet(context: Context): Boolean =
         getPrefs(context).contains(KEY_REGION)
 
     /**
-     * Persists the Firestore target region.
+     * Persists the Firestore target region, normalising the value to uppercase.
      *
-     * Uses `commit()` (synchronous write) instead of `apply()` because the region value
-     * must be readable by [FirestoreManager] immediately on the next line.
+     * Uses [SharedPreferences.Editor.commit] (synchronous) rather than `apply` because
+     * [FirestoreManager.getDb] must be able to read the updated region value on the very
+     * next call without waiting for an asynchronous disk write to complete.
      *
-     * @param region `"IN"` or `"US"` (case-insensitive; stored as uppercase).
+     * The write is skipped entirely if the new value equals the already-stored one to
+     * avoid unnecessary disk I/O.
+     *
+     * @param region The region code to persist — typically `"IN"` or `"US"`.
      */
     fun setTargetRegion(context: Context, region: String) {
         val normalizedRegion = region.uppercase()
-        // Only write if the value has actually changed to avoid unnecessary disk writes
+        // Skip the write entirely when the value hasn't changed to avoid unnecessary disk I/O.
         if (normalizedRegion != getTargetRegion(context)) {
             getPrefs(context).edit().putString(KEY_REGION, normalizedRegion).commit()
         }
@@ -75,24 +92,31 @@ object DeviceManager {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
-    /** Returns the [SharedPreferences] instance used by all DeviceManager operations. */
+    /**
+     * Returns the [SharedPreferences] instance backed by the `clipsync_prefs` file.
+     * All DeviceManager read and write operations use this instance exclusively.
+     */
     private fun getPrefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
     // ── Device ID ─────────────────────────────────────────────────────────────
 
     /**
-     * Returns the stable device ID for this Android device.
+     * Returns the stable, persistent identifier for this Android device installation.
      *
-     * The ID is generated once on first call (`"<Build.MODEL>_<UUID>"`) and then persisted
-     * so the same value is returned on every subsequent call.
+     * The ID is composed as `"<Build.MODEL>_<UUID>"` and generated exactly once on the
+     * first call. All subsequent calls return the persisted value, making this ID stable
+     * across app restarts (but not across reinstalls or data clears, by design).
+     *
+     * This ID is written as `sourceDeviceId` in every Firestore clipboard document so
+     * that each device can distinguish its own uploads from those of the paired Mac.
      *
      * @return A non-empty string that uniquely identifies this device installation.
      */
     fun getDeviceId(context: Context): String {
         var deviceId = getPrefs(context).getString(KEY_ANDROID_DEVICE_ID, null)
         if (deviceId == null) {
-            // First launch: generate and persist a stable ID
+            // First call: generate a stable ID from the device model and a random UUID, then persist it.
             deviceId = "${Build.MODEL}_${UUID.randomUUID()}"
             getPrefs(context).edit().putString(KEY_ANDROID_DEVICE_ID, deviceId).apply()
         }
@@ -103,15 +127,24 @@ object DeviceManager {
 
     /**
      * Returns `true` if this device has been successfully paired with a Mac.
-     * Used by [MainActivity] to decide the initial navigation destination.
+     *
+     * Used by [MainActivity] to decide whether to navigate directly to the home screen
+     * or to the QR scanner pairing screen on app launch.
      */
     fun isPaired(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_PAIRED, false)
 
     /**
-     * Persists all pairing data after a successful QR scan + Firestore pairing.
+     * Atomically persists all pairing data to [SharedPreferences] after a successful
+     * QR scan and Firestore document creation.
      *
-     * @param pairingId      The Firestore document ID of the pairing record.
+     * Writes the following values in a single editor transaction:
+     * - `is_paired` flag set to `true`.
+     * - Firestore pairing document ID.
+     * - Paired Mac device ID and display name.
+     * - This Android device's display name (captured at pairing time).
+     *
+     * @param pairingId      The Firestore document ID of the newly created pairing record.
      * @param macDeviceId    The unique identifier of the paired Mac.
      * @param macDeviceName  The human-readable display name of the Mac.
      */
@@ -134,17 +167,23 @@ object DeviceManager {
     }
 
     /**
-     * Returns the display name of the currently paired Mac, or `"Unknown Device"` if
-     * no pairing has been saved yet.
+     * Returns the display name of the currently paired Mac as stored during the last
+     * successful [savePairing] call. Returns `"Unknown Device"` if no pairing exists yet.
      */
     fun getPairedMacDeviceName(context: Context): String =
         getPrefs(context).getString(KEY_PAIRED_DEVICE_NAME, "Unknown Device") ?: "Unknown Device"
 
     /**
-     * Builds a human-readable name for this Android device from [Build.MANUFACTURER]
-     * and [Build.MODEL]. Truncated to 20 characters to keep it UI-friendly.
+     * Builds a human-readable display name for this Android device by combining
+     * [Build.MANUFACTURER] and [Build.MODEL].
      *
-     * Examples: `"Samsung Galaxy S23"`, `"Google Pixel 8"`, `"Android Emulator"`.
+     * Special cases:
+     * - If the model string contains `"sdk"` (emulator detection), returns `"Android Emulator"`.
+     * - The manufacturer name is title-cased for consistency (e.g. `"samsung"` → `"Samsung"`).
+     * - The result is truncated to 20 characters to keep it suitable for compact UI display.
+     *
+     * Examples of returned values: `"Samsung Galaxy S23"`, `"Google Pixel 8"`,
+     * `"Xiaomi Redmi Note"`, `"Android Emulator"`.
      */
     fun getAndroidDeviceName(): String {
         val manufacturer = Build.MANUFACTURER ?: ""
@@ -159,20 +198,26 @@ object DeviceManager {
                 "$capitalizedManufacturer $model"
             }
             else -> model
-        }.take(20)  // cap at 20 chars for display purposes
+        }.take(20) // Truncate to 20 chars for UI display compatibility.
     }
 
     /**
-     * Returns the Firestore document ID of the active pairing, or `null` if unpaired.
-     * Used by [FirestoreManager] to scope all Firestore queries to this pairing.
+     * Returns the Firestore document ID of the active pairing record, or `null` if this
+     * device is not currently paired.
+     *
+     * [FirestoreManager] uses this value to scope every Firestore query to the correct
+     * pairing, ensuring that clipboard items belonging to other users are never visible.
      */
     fun getPairingId(context: Context): String? =
         getPrefs(context).getString(KEY_PAIRING_ID, null)
 
     /**
-     * Clears all pairing data from SharedPreferences.
-     * Called when the user taps "Re-pair" or "Reset Pairing".
-     * Does NOT delete the Firestore document — use [FirestoreManager.clearPairing] for that.
+     * Removes all pairing-related keys from [SharedPreferences], returning the device
+     * to an unpaired state.
+     *
+     * Note: this method only clears local storage. It does **not** delete the corresponding
+     * Firestore document. Call [FirestoreManager.clearPairing] first if the cloud record
+     * should also be removed.
      */
     fun clearPairing(context: Context) {
         getPrefs(context).edit().apply {
@@ -188,15 +233,21 @@ object DeviceManager {
     // ── Encryption key ────────────────────────────────────────────────────────
 
     /**
-     * Returns the AES-256 encryption key (hex-encoded) agreed during pairing.
-     * Falls back to [Secrets.FALLBACK_ENCRYPTION_KEY] if no key has been stored yet.
+     * Returns the AES-256 encryption key (64-character hex string) for the current
+     * pairing session.
+     *
+     * If no key has been stored yet — for example before the first QR scan — this falls
+     * back to [Secrets.FALLBACK_ENCRYPTION_KEY] so that Firestore operations do not crash.
      */
     fun getEncryptionKey(context: Context): String =
         getPrefs(context).getString(KEY_ENCRYPTION_KEY, null)
             ?: Secrets.FALLBACK_ENCRYPTION_KEY
 
     /**
-     * Persists the AES encryption key received from the Mac's QR code during pairing.
+     * Persists the AES-256 session key received from the Mac's QR code payload.
+     *
+     * This key must be saved before [FirestoreManager.createPairing] writes to Firestore
+     * so that the very first outgoing clipboard upload is encrypted with the correct key.
      *
      * @param key A 64-character hex string representing a 32-byte AES-256 key.
      */
@@ -206,20 +257,38 @@ object DeviceManager {
 
     // ── Sync direction toggles ────────────────────────────────────────────────
 
-    /** Returns `true` if the "Sync to Mac" toggle is enabled (default: `true`). */
+    /**
+     * Returns `true` if the user has enabled clipboard sync from this Android device to
+     * the paired Mac (default: `true`).
+     *
+     * When `false`, [ClipboardAccessibilityService] still detects copy events but
+     * [FirestoreManager.sendClipboard] is not invoked.
+     */
     fun isSyncToMacEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_SYNC_TO_MAC, true)
 
-    /** Persists the "Sync to Mac" toggle state. */
+    /** Persists the "Sync to Mac" toggle state.
+     *
+     * @param enabled `true` to allow Android → Mac clipboard sync; `false` to disable it.
+     */
     fun setSyncToMacEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SYNC_TO_MAC, enabled).apply()
     }
 
-    /** Returns `true` if the "Sync from Mac" toggle is enabled (default: `true`). */
+    /**
+     * Returns `true` if the user has enabled clipboard sync from the paired Mac to this
+     * Android device (default: `true`).
+     *
+     * When `false`, incoming Firestore clipboard items are ignored by the snapshot
+     * listener started in [ClipboardAccessibilityService].
+     */
     fun isSyncFromMacEnabled(context: Context): Boolean =
         getPrefs(context).getBoolean(KEY_SYNC_FROM_MAC, true)
 
-    /** Persists the "Sync from Mac" toggle state. */
+    /** Persists the "Sync from Mac" toggle state.
+     *
+     * @param enabled `true` to allow Mac → Android clipboard sync; `false` to disable it.
+     */
     fun setSyncFromMacEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SYNC_FROM_MAC, enabled).apply()
     }

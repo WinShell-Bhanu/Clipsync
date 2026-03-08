@@ -1,14 +1,16 @@
-
-
+// Final.swift (FinalScreen)
+// Onboarding permissions screen shown after the connected animation.
+// Requests Accessibility and Notification permissions; Network Access is always enabled.
+// Polls permission state every 1 second so toggles update live without a relaunch.
+// "Finish Setup" calls PairingManager.shared.completeSetup() to transition to HomeScreen.
 
 import SwiftUI
 import AppKit
 import UserNotifications
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates final screen behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+// MARK: - FinalScreen
+
 struct FinalScreen: View {
 
     @State private var showAccessibilityIcon = false
@@ -275,10 +277,9 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Starts animations flow and required listeners.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    // MARK: - Animations & Permissions
+
+    /// Staggers spring animations for title, subtitle, permission cards, and the finish button.
     private func startAnimations() {
 
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -308,10 +309,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Implements the check system permissions operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Reads AXIsProcessTrusted and UNNotificationSettings to refresh toggle states.
     private func checkSystemPermissions() {
         let axGranted = AXIsProcessTrusted()
         if isAccessibilityGranted != axGranted {
@@ -331,10 +329,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Starts polling flow and required listeners.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Starts a 1-second repeating timer so permission toggles update in real time.
     private func startPolling() {
         permissionTimer?.invalidate()
         permissionTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
@@ -343,10 +338,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Implements the request accessibility permission operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Triggers the AX permission dialog then deep-links into System Settings > Privacy > Accessibility.
     private func requestAccessibilityPermission() {
         if isAccessibilityGranted {
             openSystemSettings()
@@ -362,10 +354,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Implements the request notification permission operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Shows the system notification permission dialog on first request; opens Settings if already denied.
     private func requestNotificationPermission() {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
@@ -387,10 +376,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Implements the open system settings operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Deep-links into System Settings > Privacy > Accessibility.
     private func openSystemSettings() {
         let urlString = "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility"
         if let url = URL(string: urlString) {
@@ -399,10 +385,7 @@ struct FinalScreen: View {
     }
 
 
-    // Purpose: Implements the open notification settings operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Deep-links into System Settings > Notifications.
     private func openNotificationSettings() {
         if let url = URL(string: "x-apple.systempreferences:com.apple.preference.notifications") {
             NSWorkspace.shared.open(url)

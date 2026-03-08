@@ -276,7 +276,11 @@ struct QRGenScreen: View {
             playEntranceAnimations()
         }
         .onChange(of: pairingManager.isPaired) { oldValue, newValue in
-            if newValue {
+            // Bug fix: only navigate when isPaired transitions false → true.
+            // Without this guard, if QRGenScreen appears while isPaired is already
+            // true (race with clearPairing), it would immediately navigate to
+            // ConnectedScreen before the user even scans the QR code.
+            if oldValue == false && newValue == true {
                 navigateToConnected = true
             }
         }

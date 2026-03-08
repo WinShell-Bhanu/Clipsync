@@ -1,23 +1,20 @@
-
-
+// DeviceManager.swift
+// Manages the stable device identity for this Mac instance and provides
+// human-readable device names used in pairing and Firestore documents.
 
 import Foundation
 import IOKit
 
+// MARK: - DeviceManager
 
-// Purpose: Coordinator component that centralizes state, integration calls, and orchestration.
-// Responsibilities: Encapsulates device manager behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 class DeviceManager {
     static let shared = DeviceManager()
 
     private let deviceIdKey = "mac_device_id"
 
+    // MARK: - Identity
 
-    // Purpose: Returns computed or stored device id.
-    // Parameters: No parameters.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Returns the persisted device UUID, generating and saving one on first call.
     func getDeviceId() -> String {
         if let existingId = UserDefaults.standard.string(forKey: deviceIdKey) {
             return existingId
@@ -29,19 +26,13 @@ class DeviceManager {
     }
 
 
-    // Purpose: Returns computed or stored mac name.
-    // Parameters: No parameters.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Returns the macOS host name (e.g. "John's MacBook Pro").
     func getMacName() -> String {
         return Host.current().localizedName ?? "Mac"
     }
 
 
-    // Purpose: Returns computed or stored friendly mac name.
-    // Parameters: No parameters.
-    // Returns: String.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Formats the host name into a "John's Mac" style string suitable for the paired device UI.
     func getFriendlyMacName() -> String {
         let fullName = getMacName()
         let components = fullName.split(separator: " ")

@@ -1,11 +1,14 @@
+// ConnectedScreen.swift
+// Success screen shown immediately after a new pairing is confirmed.
+// Plays a Lottie device-sync animation, starts clipboard monitoring,
+// and navigates to FinalScreen when the user taps "Continue".
+
 import SwiftUI
 import AppKit
 import Lottie
 
+// MARK: - ConnectedScreen
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates connected screen behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct ConnectedScreen: View {
     @StateObject private var pairingManagerr = PairingManager.shared
     @State private var navigateToFinal = false
@@ -90,10 +93,7 @@ struct ConnectedScreen: View {
     }
 
 
-    // Purpose: Implements the play entrance animations operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Staggers spring animations for the title, subtitle, Lottie animation, and CTA button.
     private func playEntranceAnimations() {
 
         withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
@@ -122,17 +122,11 @@ struct ConnectedScreen: View {
 }
 
 
-// Purpose: UI component that renders state and user interactions.
-// Responsibilities: Encapsulates connect lottie view behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// NSViewRepresentable wrapper that loads and plays a named Lottie animation file.
 struct ConnectLottieView: NSViewRepresentable {
     var filename: String
 
 
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let containerView = NSView(frame: .zero)
         containerView.wantsLayer = true
@@ -158,10 +152,6 @@ struct ConnectLottieView: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         if let animationView = nsView.subviews.first as? LottieAnimationView {
             animationView.frame = nsView.bounds

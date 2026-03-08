@@ -1,6 +1,10 @@
 
 
 
+// ClipSyncApp.swift
+// App entry point. Registers defaults, boots Firebase, and starts clipboard sync
+// if the Mac is already paired. Also owns the main SwiftUI window configuration.
+
 import SwiftUI
 import FirebaseCore
 import FirebaseMessaging
@@ -9,21 +13,15 @@ import Combine
 import IOKit.pwr_mgt
 import UserNotifications
 
+// MARK: - App Entry Point
+
 @main
-
-
-// Purpose: Struct that models clip sync app behavior in this module.
-// Responsibilities: Encapsulates clip sync app behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 struct ClipSyncApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var pairingManager = PairingManager.shared
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
+    /// Registers default preferences, initialises Firebase, and resumes clipboard
+    /// sync/listening if a valid pairing was previously saved.
     init() {
 
 
@@ -65,26 +63,17 @@ struct ClipSyncApp: App {
 }
 
 
-// Purpose: Struct that models window configurator behavior in this module.
-// Responsibilities: Encapsulates window configurator behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+// MARK: - Window Configuration
+
+/// Applies NSWindow styling (transparent title bar, vibrancy, movable by background)
+/// to the SwiftUI window on first layout via an invisible NSView bridge.
 private struct WindowConfigurator: NSViewRepresentable {
     let configure: (NSWindow) -> Void
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: configure.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init(_ configure: @escaping (NSWindow) -> Void) {
         self.configure = configure
     }
 
-
-    // Purpose: Implements the make nsview operation for this feature.
-    // Parameters: context.
-    // Returns: NSView.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func makeNSView(context: Context) -> NSView {
         let view = NSView(frame: .zero)
         DispatchQueue.main.async { [weak view] in
@@ -94,10 +83,6 @@ private struct WindowConfigurator: NSViewRepresentable {
     }
 
 
-    // Purpose: Updates nsview based on current inputs.
-    // Parameters: nsView, context.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async { [weak nsView] in
             if let win = nsView?.window { configure(win) }
@@ -105,6 +90,7 @@ private struct WindowConfigurator: NSViewRepresentable {
     }
 }
 
+// MARK: - Hot-Reload (Debug Only)
 
 #if canImport(HotSwiftUI)
 @_exported import HotSwiftUI
@@ -114,21 +100,13 @@ private struct WindowConfigurator: NSViewRepresentable {
 #if DEBUG
 import Combine
 
-
-// Purpose: Class that models injection observer behavior in this module.
-// Responsibilities: Encapsulates injection observer behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+/// Observes `INJECTION_BUNDLE_NOTIFICATION` so views can force-redraw on hot-reload.
 public class InjectionObserver: ObservableObject {
     public static let shared = InjectionObserver()
     @Published var injectionNumber = 0
     var cancellable: AnyCancellable? = nil
     let publisher = PassthroughSubject<Void, Never>()
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     init() {
         cancellable = NotificationCenter.default.publisher(for:
             Notification.Name("INJECTION_BUNDLE_NOTIFICATION"))
@@ -139,35 +117,16 @@ public class InjectionObserver: ObservableObject {
     }
 }
 
-
-// Purpose: Extension that adds focused behavior to an existing type.
-// Responsibilities: Encapsulates swift ui behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 extension SwiftUI.View {
 
-
-    // Purpose: Implements the erase to any view operation for this feature.
-    // Parameters: No parameters.
-    // Returns: some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func eraseToAnyView() -> some SwiftUI.View {
         return AnyView(self)
     }
 
-
-    // Purpose: Implements the enable injection operation for this feature.
-    // Parameters: No parameters.
-    // Returns: some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func enableInjection() -> some SwiftUI.View {
         return eraseToAnyView()
     }
 
-
-    // Purpose: Handles the on injection callback path.
-    // Parameters: bumpState.
-    // Returns: ()) -> some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
         return self
             .onReceive(InjectionObserver.shared.publisher, perform: bumpState)
@@ -177,19 +136,9 @@ extension SwiftUI.View {
 
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 @propertyWrapper
-
-
-// Purpose: Struct that models observe injection behavior in this module.
-// Responsibilities: Encapsulates observe injection behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 public struct ObserveInjection: DynamicProperty {
     @ObservedObject private var iO = InjectionObserver.shared
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     public init() {}
     public private(set) var wrappedValue: Int {
         get {0} set {}
@@ -197,34 +146,12 @@ public struct ObserveInjection: DynamicProperty {
 }
 #else
 
-
-// Purpose: Extension that adds focused behavior to an existing type.
-// Responsibilities: Encapsulates swift ui behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 extension SwiftUI.View {
     @inline(__always)
-
-
-    // Purpose: Implements the erase to any view operation for this feature.
-    // Parameters: No parameters.
-    // Returns: some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func eraseToAnyView() -> some SwiftUI.View { return self }
     @inline(__always)
-
-
-    // Purpose: Implements the enable injection operation for this feature.
-    // Parameters: No parameters.
-    // Returns: some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func enableInjection() -> some SwiftUI.View { return self }
     @inline(__always)
-
-
-    // Purpose: Handles the on injection callback path.
-    // Parameters: bumpState.
-    // Returns: ()) -> some SwiftUI.View.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
         return self
     }
@@ -232,18 +159,8 @@ extension SwiftUI.View {
 
 @available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
 @propertyWrapper
-
-
-// Purpose: Struct that models observe injection behavior in this module.
-// Responsibilities: Encapsulates observe injection behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
 public struct ObserveInjection {
 
-
-    // Purpose: Initializes the type with required runtime state.
-    // Parameters: No parameters.
-    // Returns: New initialized instance.
-    // Notes: Keep initialization lightweight and defer heavy work when possible.
     public init() {}
     public private(set) var wrappedValue: Int {
         get {0} set {}
@@ -253,29 +170,30 @@ public struct ObserveInjection {
 #endif
 
 
-// Purpose: Class that models app delegate behavior in this module.
-// Responsibilities: Encapsulates app delegate behavior for this feature area.
-// Usage: Start here to understand how this file contributes to app-level flow.
+// MARK: - AppDelegate
+
+/// Wires up FCM messaging, push notifications, the menu bar status item, and
+/// the OTP popover. Also manages the Dock icon visibility based on paired state.
 class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNotificationCenterDelegate, OTPNotificationDelegate {
+
+    // MARK: - Properties
+
     var statusItem: NSStatusItem?
     var popover: NSPopover?
     var cancellables = Set<AnyCancellable>()
     var assertionID: IOPMAssertionID = 0
 
+    // MARK: - Lifecycle
 
-    // Purpose: Implements the application did finish launching operation for this feature.
-    // Parameters: notification.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Boots FCM, notification permissions, builds the popover, and starts
+    /// observing pairing state to show/hide the menu bar icon.
     func applicationDidFinishLaunching(_ notification: Notification) {
 
         // Set FCM delegate
         Messaging.messaging().delegate = self
         
-        // Set notification center delegate
         UNUserNotificationCenter.current().delegate = self
         
-        // Request notification permissions
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
             if granted {
                 print("✅ Notification permission granted")
@@ -284,7 +202,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
             }
         }
         
-        // Register for remote notifications
         NSApplication.shared.registerForRemoteNotifications()
 
         let pop = NSPopover()
@@ -314,19 +231,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     }
 
 
-    // Purpose: Implements the application will terminate operation for this feature.
-    // Parameters: notification.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationWillTerminate(_ notification: Notification) {
         OTPNotificationManager.shared.stopListening()
     }
 
+    // MARK: - Dock & Menu Bar
 
-    // Purpose: Updates dock policy based on current inputs.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Hides the Dock icon when paired (app lives in menu bar only) and shows it
+    /// when unpaired so the user can access onboarding.
     func updateDockPolicy() {
 
 
@@ -351,10 +263,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     }
 
 
-    // Purpose: Updates menu bar state based on current inputs.
-    // Parameters: show.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Creates the NSStatusItem when paired, removes it when unpaired.
     func updateMenuBarState(show: Bool) {
         if show {
             if statusItem == nil {
@@ -374,10 +283,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     }
 
 
-    // Purpose: Implements the toggle popover operation for this feature.
-    // Parameters: sender.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// If a recent OTP exists, re-shows its bubble; otherwise toggles the settings popover.
     @objc func togglePopover(_ sender: AnyObject?) {
 
 
@@ -397,10 +303,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     }
 
 
-    // Purpose: Implements the prevent app sleep operation for this feature.
-    // Parameters: No parameters.
-    // Returns: Void unless returned explicitly.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
+    /// Uses IOPMAssertion to prevent the system from idle-sleeping while ClipSync is monitoring.
     func preventAppSleep() {
         let reason = "ClipSync needs to monitor clipboard" as CFString
         let success = IOPMAssertionCreateWithName(
@@ -418,19 +321,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     }
 
 
-    // Purpose: Implements the application should terminate after last window closed operation for this feature.
-    // Parameters: sender.
-    // Returns: Bool.
-    // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
         return false
     }
 
-
-    // Purpose: Finalizes the instance before deallocation.
-    // Parameters: No external parameters.
-    // Returns: Void.
-    // Notes: Release observers, timers, and retained resources here.
     deinit {
         NotificationCenter.default.removeObserver(self)
         if assertionID != 0 {
@@ -440,11 +334,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     
     
     // MARK: - MessagingDelegate
-    
-    // Purpose: Called when FCM token is refreshed.
-    // Parameters: messaging, fcmToken.
-    // Returns: Void unless returned explicitly.
-    // Notes: Stores token in Firestore for manual notification sending.
+
+    /// Receives the refreshed FCM token, stores it in Firestore, and subscribes
+    /// to the `all_devices` topic so the Firebase console can broadcast to all Macs.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         print("✅ FCM Token received")
@@ -463,14 +355,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
             }
         }
     }
+
+    /// Hands the APNs device token to Firebase so it can map it to the FCM token.
+    func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        Messaging.messaging().apnsToken = deviceToken
+        let tokenHex = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
+        print("✅ APNs token registered: \(tokenHex)")
+    }
+
+    func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
+        print("❌ APNs registration failed: \(error.localizedDescription)")
+    }
     
     
     // MARK: - UNUserNotificationCenterDelegate
-    
-    // Purpose: Called when notification is received while app is in foreground.
-    // Parameters: center, notification, completionHandler.
-    // Returns: Void unless returned explicitly.
-    // Notes: Shows notification even when app is open.
+
+    /// Ensures banners and sounds appear even while the app is in the foreground.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         willPresent notification: UNNotification,
@@ -479,12 +379,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
         // Show notification even when app is in foreground
         completionHandler([.banner, .sound, .badge])
     }
-    
-    
-    // Purpose: Called when user taps on a notification.
-    // Parameters: center, response, completionHandler.
-    // Returns: Void unless returned explicitly.
-    // Notes: Opens app and shows update dialog.
+
+    /// Handles a notification tap: if it's an update notification, saves the
+    /// update info and fires `.showUpdateDialog` so HomeScreen can present the alert.
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
         didReceive response: UNNotificationResponse,
@@ -492,20 +389,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     ) {
         let userInfo = response.notification.request.content.userInfo
         
-        // Check if this is an update notification
         if let type = userInfo["type"] as? String, type == "update" {
             let version = userInfo["version"] as? String ?? "Unknown"
             let downloadUrl = userInfo["downloadUrl"] as? String ?? ""
             let releaseNotes = userInfo["releaseNotes"] as? String ?? "New update available!"
             
-            // Save pending update for dialog
             UpdateNotificationManager.shared.savePendingUpdate(
                 version: version,
                 downloadUrl: downloadUrl,
                 releaseNotes: releaseNotes
             )
             
-            // Notify observers to show dialog
             NotificationCenter.default.post(name: .showUpdateDialog, object: nil)
         }
         
@@ -514,9 +408,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 }
 
 
-// Purpose: Notification name for update dialog trigger.
-// Responsibilities: Used to communicate between AppDelegate and SwiftUI views.
-// Usage: Post when notification is tapped, observe in HomeScreen.
+// MARK: - Notification Names
+
 extension Notification.Name {
     static let showUpdateDialog = Notification.Name("showUpdateDialog")
 }

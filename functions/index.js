@@ -106,3 +106,4 @@ exports.cleanupNotifications = onSchedule({
 
   return null;
 });
+

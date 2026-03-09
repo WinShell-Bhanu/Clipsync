@@ -413,3 +413,4 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 extension Notification.Name {
     static let showUpdateDialog = Notification.Name("showUpdateDialog")
 }
+

@@ -6,7 +6,6 @@ import android.content.Intent
 import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
-import android.widget.Toast
 
 /**
  * A [BroadcastReceiver] that intercepts incoming SMS messages and automatically extracts
@@ -165,7 +164,6 @@ class OTPListeningService : BroadcastReceiver() {
                         ClipboardGhostActivity.copyToClipboard(appContext, otpCode)
                         // Publish the OTP to the paired Mac over Firestore.
                         OTPNotificationService.notifyOTPDetected(appContext, otpCode)
-                        Toast.makeText(appContext, "OTP Copied: $otpCode", Toast.LENGTH_SHORT).show()
                         break  // stop after the first OTP found in the message batch
                     }
                 }

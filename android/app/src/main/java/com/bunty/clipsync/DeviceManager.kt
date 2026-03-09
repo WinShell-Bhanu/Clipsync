@@ -3,6 +3,10 @@ package com.bunty.clipsync
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.util.Log
+import android.widget.Toast
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import java.util.UUID
 
 /**
@@ -28,6 +32,7 @@ import java.util.UUID
 object DeviceManager {
 
     private const val PREFS_NAME = "clipsync_prefs"
+    private const val ENCRYPTED_PREFS_NAME = "clipsync_prefs_secure"
 
     // Keys used to read and write individual values inside the clipsync_prefs file.
     // Each key is a stable string constant — changing any key is a breaking change that
@@ -92,12 +97,110 @@ object DeviceManager {
 
     // ── Internal helpers ──────────────────────────────────────────────────────
 
+    /** Cached [SharedPreferences] singleton — M3 fix: avoid re-creating EncryptedSharedPreferences
+     *  on every call, which is extremely expensive and causes ANRs in the AccessibilityService. */
+    @Volatile
+    private var cachedPrefs: SharedPreferences? = null
+    private val prefsLock = Any()
+
     /**
      * Returns the [SharedPreferences] instance backed by the `clipsync_prefs` file.
-     * All DeviceManager read and write operations use this instance exclusively.
+     *
+     * Uses [EncryptedSharedPreferences] backed by the Android Keystore so that both
+     * the keys and values at rest are protected by a hardware-bound AES-256-GCM key.
+     *
+     * C2 fix: does NOT fall back to plain SharedPreferences. If the Keystore is
+     * unavailable, the operation must fail — not silently downgrade to cleartext.
+     *
+     * C1 fix: on first creation, migrates data from the legacy plain-text prefs file
+     * so existing users never lose their pairingId or encryption key during an update.
      */
-    private fun getPrefs(context: Context): SharedPreferences =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private fun getPrefs(context: Context): SharedPreferences {
+        cachedPrefs?.let { return it }
+        synchronized(prefsLock) {
+            cachedPrefs?.let { return it }
+            val encPrefs = try {
+                createEncryptedPrefs(context)
+            } catch (e: Exception) {
+                // The encrypted prefs file is corrupted (e.g. restored from backup
+                // without the Keystore key, or stale after reinstall). Delete the
+                // broken file and create a fresh one so the app doesn't crash.
+                Log.w("DeviceManager", "EncryptedSharedPreferences corrupted — resetting", e)
+                context.getSharedPreferences(ENCRYPTED_PREFS_NAME, Context.MODE_PRIVATE)
+                    .edit().clear().commit()
+                val file = java.io.File(context.applicationInfo.dataDir,
+                    "shared_prefs/$ENCRYPTED_PREFS_NAME.xml")
+                file.delete()
+                createEncryptedPrefs(context)
+            }
+            // C1: transparent migration from legacy plain-text SharedPreferences
+            migrateFromPlainPrefs(context, encPrefs)
+            cachedPrefs = encPrefs
+            return encPrefs
+        }
+    }
+
+    private fun createEncryptedPrefs(context: Context): SharedPreferences {
+        val masterKey = MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+        return EncryptedSharedPreferences.create(
+            context,
+            ENCRYPTED_PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
+
+    /**
+     * C1: One-shot migration. Copies every known key from the old cleartext
+     * `clipsync_prefs` (MODE_PRIVATE) into [encPrefs], then wipes the old file.
+     * Idempotent: if the old file has no data, this is a noop.
+     */
+    private fun migrateFromPlainPrefs(context: Context, encPrefs: SharedPreferences) {
+        val oldPrefs = context.getSharedPreferences(PREFS_NAME + "_legacy_check", Context.MODE_PRIVATE)
+        // Check for the actual plain-text file on disk
+        val plainFile = java.io.File(context.applicationInfo.dataDir, "shared_prefs/$PREFS_NAME.xml")
+        // The encrypted file has a different on-disk name; if the plain file exists AND
+        // has our known keys, it's the legacy store that needs migrating.
+        val legacyPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        // Detect legacy data: if the plain file contains our keys before encryption was added
+        val legacyPairingId = legacyPrefs.getString(KEY_PAIRING_ID, null)
+        val legacyKey = legacyPrefs.getString(KEY_ENCRYPTION_KEY, null)
+        if (legacyPairingId == null && legacyKey == null) return // nothing to migrate
+
+        Log.i("DeviceManager", "Migrating legacy plaintext prefs to EncryptedSharedPreferences")
+        val editor = encPrefs.edit()
+        // Migrate all known keys
+        legacyPrefs.getString(KEY_ENCRYPTION_KEY, null)?.let { editor.putString(KEY_ENCRYPTION_KEY, it) }
+        legacyPrefs.getString(KEY_PAIRING_ID, null)?.let { editor.putString(KEY_PAIRING_ID, it) }
+        legacyPrefs.getString(KEY_PAIRED_DEVICE_ID, null)?.let { editor.putString(KEY_PAIRED_DEVICE_ID, it) }
+        legacyPrefs.getString(KEY_PAIRED_DEVICE_NAME, null)?.let { editor.putString(KEY_PAIRED_DEVICE_NAME, it) }
+        legacyPrefs.getString(KEY_ANDROID_DEVICE_ID, null)?.let { editor.putString(KEY_ANDROID_DEVICE_ID, it) }
+        legacyPrefs.getString(KEY_ANDROID_DEVICE_NAME, null)?.let { editor.putString(KEY_ANDROID_DEVICE_NAME, it) }
+        legacyPrefs.getString(KEY_REGION, null)?.let { editor.putString(KEY_REGION, it) }
+        if (legacyPrefs.contains(KEY_PAIRED)) editor.putBoolean(KEY_PAIRED, legacyPrefs.getBoolean(KEY_PAIRED, false))
+        if (legacyPrefs.contains(KEY_SYNC_TO_MAC)) editor.putBoolean(KEY_SYNC_TO_MAC, legacyPrefs.getBoolean(KEY_SYNC_TO_MAC, true))
+        if (legacyPrefs.contains(KEY_SYNC_FROM_MAC)) editor.putBoolean(KEY_SYNC_FROM_MAC, legacyPrefs.getBoolean(KEY_SYNC_FROM_MAC, true))
+        editor.commit() // synchronous to guarantee data is written before we wipe
+
+        // Wipe the old plaintext file
+        legacyPrefs.edit().clear().commit()
+        Log.i("DeviceManager", "Legacy prefs migration complete — old data wiped")
+    }
+
+    /**
+     * Surfaces a security error to the user via a Toast.
+     * Called when a Keystore / encryption operation fails.
+     */
+    internal fun notifySecurityError(context: Context, message: String) {
+        try {
+            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                Toast.makeText(context.applicationContext, "⚠️ ClipSync: $message", Toast.LENGTH_LONG).show()
+            }
+        } catch (_: Exception) { /* best-effort UI notification */ }
+    }
 
     // ── Device ID ─────────────────────────────────────────────────────────────
 
@@ -234,14 +337,13 @@ object DeviceManager {
 
     /**
      * Returns the AES-256 encryption key (64-character hex string) for the current
-     * pairing session.
+     * pairing session, or `null` if no key has been stored yet.
      *
-     * If no key has been stored yet — for example before the first QR scan — this falls
-     * back to [Secrets.FALLBACK_ENCRYPTION_KEY] so that Firestore operations do not crash.
+     * M2 fix: no longer falls back to FALLBACK_ENCRYPTION_KEY. Callers must guard
+     * with `if (!isPaired()) return` before using this value.
      */
-    fun getEncryptionKey(context: Context): String =
+    fun getEncryptionKey(context: Context): String? =
         getPrefs(context).getString(KEY_ENCRYPTION_KEY, null)
-            ?: Secrets.FALLBACK_ENCRYPTION_KEY
 
     /**
      * Persists the AES-256 session key received from the Mac's QR code payload.

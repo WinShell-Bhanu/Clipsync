@@ -54,12 +54,9 @@ object FirestoreManager {
 
     /**
      * Retrieves the AES-256 encryption key (hex string) for the current pairing session.
-     *
-     * Delegates to [DeviceManager.getEncryptionKey], which returns the key stored during
-     * the last successful QR scan or falls back to [Secrets.FALLBACK_ENCRYPTION_KEY] if
-     * no key has been persisted yet.
+     * Returns null if the device is not paired (M2 fix).
      */
-    private fun getSharedSecret(context: Context): String =
+    private fun getSharedSecret(context: Context): String? =
         DeviceManager.getEncryptionKey(context)
 
     /**
@@ -126,7 +123,9 @@ object FirestoreManager {
         val encryptedBytes = android.util.Base64.decode(encryptedBase64, android.util.Base64.NO_WRAP)
         if (encryptedBytes.size < 28) return "" // minimum valid size is 12 (IV) + 16 (GCM tag) bytes
 
-        val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(getSharedSecret(context)), "AES")
+        val secret = getSharedSecret(context)
+            ?: throw IllegalStateException("No encryption key — device is not paired")
+        val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(secret), "AES")
 
         // Split the decoded bytes: the first 12 bytes are the IV, the remainder is ciphertext + GCM tag.
         val iv         = encryptedBytes.copyOfRange(0, 12)
@@ -159,7 +158,9 @@ object FirestoreManager {
      */
     private fun encryptData(context: Context, plainText: String): String {
         return try {
-            val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(getSharedSecret(context)), "AES")
+            val secret = getSharedSecret(context)
+                ?: throw IllegalStateException("No encryption key — device is not paired")
+            val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(secret), "AES")
             val cipher  = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
 
             // A fresh random IV is generated for every call, ensuring ciphertext uniqueness.
@@ -176,7 +177,7 @@ object FirestoreManager {
             android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Encryption failed", e)
-            plainText // last-resort fallback: send unencrypted so content is not silently lost
+            throw e // do NOT send plaintext; abort the upload instead
         }
     }
 
@@ -190,10 +191,14 @@ object FirestoreManager {
      * @return A [ByteArray] whose length is `s.length / 2`.
      */
     private fun hexStringToByteArray(s: String): ByteArray {
+        require(s.length % 2 == 0) { "Invalid hex length: ${s.length}" }
         val data = ByteArray(s.length / 2)
         var i = 0
         while (i < s.length) {
-            data[i / 2] = ((Character.digit(s[i], 16) shl 4) + Character.digit(s[i + 1], 16)).toByte()
+            val high = Character.digit(s[i], 16)
+            val low  = Character.digit(s[i + 1], 16)
+            require(high != -1 && low != -1) { "Invalid hex character at index $i" }
+            data[i / 2] = ((high shl 4) + low).toByte()
             i += 2
         }
         return data
@@ -329,6 +334,8 @@ object FirestoreManager {
                             }
                         } catch (e: Exception) {
                             Log.e("FirestoreManager", "Failed to decrypt incoming clipboard", e)
+                            // U2: inform the user instead of silently swallowing the error
+                            DeviceManager.notifySecurityError(context, "Decryption failed — clipboard not synced")
                         }
                     }
                 }
@@ -360,7 +367,14 @@ object FirestoreManager {
             return
         }
 
-        val encryptedContent = encryptData(context, text)
+        val encryptedContent = try {
+            encryptData(context, text)
+        } catch (e: Exception) {
+            Log.e("FirestoreManager", "Cannot send clipboard: encryption failed", e)
+            DeviceManager.notifySecurityError(context, "Encryption failed — clipboard not sent")
+            onFailure(e)
+            return
+        }
 
         val clipboardData = hashMapOf<String, Any>(
             "content"        to encryptedContent,

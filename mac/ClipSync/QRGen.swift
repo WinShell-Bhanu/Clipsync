@@ -316,9 +316,9 @@ struct QRGenScreen: View {
                     self.selectedCountry = countryName
                     self.updateServerRegion(for: countryName)
                 } else {
-                    self.selectedCountry = "India"
-                    self.detectedCountry = "India"
-                    self.updateServerRegion(for: "India")
+                    self.selectedCountry = "France"
+                    self.detectedCountry = "France"
+                    self.updateServerRegion(for: "France")
                 }
             }
         }
@@ -389,7 +389,7 @@ struct QRGenScreen: View {
             "AZ": "Azerbaijan", "AM": "Armenia", "GE": "Georgia"
         ]
 
-        return codeToName[code] ?? "India"
+        return codeToName[code] ?? "France"
     }
 
 

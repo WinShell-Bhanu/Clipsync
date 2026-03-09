@@ -1,11 +1,15 @@
 package com.bunty.clipsync
 
+import android.Manifest
 import android.accessibilityservice.AccessibilityService
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
+import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -53,6 +57,8 @@ class ClipboardAccessibilityService : AccessibilityService() {
     private var lastGhostLaunchTime = 0L
     private var firestoreListener: ListenerRegistration? = null
     private val clearIgnoreRunnable = Runnable { ignoreNextChange = false }
+    private var clipboardChangedListener: ClipboardManager.OnPrimaryClipChangedListener? = null
+    private var screenshotObserver: ScreenshotObserver? = null
 
     companion object {
         private const val TAG = "ClipSync_Service"
@@ -266,10 +272,110 @@ class ClipboardAccessibilityService : AccessibilityService() {
         isRunning = true
         try {
             startFirestoreListener()
+            // Start the local image server so the Mac can send images to this device.
+            ImageTransferManager.startServer(this)
+            // Detect screenshots and any image placed in clipboard without an accessibility event.
+            // primaryClipDescription (MIME metadata only) is readable in background on API 29+.
+            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
+            val listener = ClipboardManager.OnPrimaryClipChangedListener {
+                if (ignoreNextChange) {
+                    Log.d(TAG, "OnPrimaryClipChangedListener fired — suppressed (ignoreNextChange=true)")
+                    return@OnPrimaryClipChangedListener
+                }
+                if (ImageTransferManager.ignoreNextClipboardChange) {
+                    Log.d(TAG, "OnPrimaryClipChangedListener fired — suppressed (ignoreNextClipboardChange=true, image echo)")
+                    return@OnPrimaryClipChangedListener
+                }
+                val desc = clipboard.primaryClipDescription
+                val mimeCount = desc?.mimeTypeCount ?: 0
+                val mimes = (0 until mimeCount).joinToString(", ") { desc!!.getMimeType(it) }
+                Log.d(TAG, "OnPrimaryClipChangedListener fired — mimeTypes=[$mimes], hasImage=${desc?.hasMimeType("image/*") ?: false}")
+                // On Android 14+, primaryClipDescription can be null for background services.
+                // Treat null as "possibly image" and let ClipboardGhostActivity check the real MIME.
+                // For non-null non-image descs, accessibility events already handle text copies.
+                if (desc == null || desc.hasMimeType("image/*")) {
+                    Log.d(TAG, "OnPrimaryClipChangedListener: image or null desc → launching ghost")
+                    handler.postDelayed({ handleClipboardChange("ClipboardChanged") }, 50)
+                } else {
+                    Log.d(TAG, "OnPrimaryClipChangedListener: non-image MIME → skipping (accessibility events handle text)")
+                }
+            }
+            clipboard.addPrimaryClipChangedListener(listener)
+            clipboardChangedListener = listener
+
+            // ── Screenshot detection via MediaStore ContentObserver ────────────────
+            // OnPrimaryClipChangedListener does NOT fire for background services on
+            // Android 12+ (API 31+) when another app writes to clipboard. A
+            // ContentObserver on MediaStore fires as soon as a screenshot is saved to
+            // storage, bypassing the clipboard restriction entirely.
+            val hasMediaPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            } else {
+                checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            }
+            if (hasMediaPermission) {
+                registerScreenshotObserver()
+            } else {
+                Log.w(TAG, "READ_MEDIA_IMAGES permission not granted — screenshot detection " +
+                    "disabled. Go to Settings → Apps → ClipSync → Permissions → Photos")
+                // Re-check periodically: user might grant the permission later.
+                schedulePermissionRecheck()
+            }
+
+            Log.d(TAG, "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501")
+            Log.d(TAG, "ClipSync service READY")
+            Log.d(TAG, "  Firestore listener  : active")
+            Log.d(TAG, "  Image server (recv) : port ${ImageTransferManager.LOCAL_SERVER_PORT}")
+            Log.d(TAG, "  Screenshot observer : ${if (screenshotObserver != null) "✅ active" else "❌ OFF (grant READ_MEDIA_IMAGES)"}")
+            Log.d(TAG, "  Paired              : ${DeviceManager.isPaired(this)}")
+            Log.d(TAG, "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501")
         } catch (e: Exception) {
             Log.e(TAG, "Error in onServiceConnected", e)
         }
     }
+
+    /**
+     * Registers the [ScreenshotObserver] on MediaStore.
+     * Extracted so it can be called both from [onServiceConnected] and from
+     * the deferred permission re-check.
+     */
+    private fun registerScreenshotObserver() {
+        if (screenshotObserver != null) return // already registered
+        val observer = ScreenshotObserver(this, handler)
+        contentResolver.registerContentObserver(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            true,
+            observer
+        )
+        screenshotObserver = observer
+        Log.d(TAG, "ScreenshotObserver registered — MediaStore screenshot detection active")
+    }
+
+    /**
+     * Re-checks READ_MEDIA_IMAGES every 15 seconds until the permission is granted,
+     * then registers the [ScreenshotObserver]. Stops after the observer is registered
+     * or after [onDestroy].
+     */
+    private fun schedulePermissionRecheck() {
+        val recheckRunnable = object : Runnable {
+            override fun run() {
+                if (screenshotObserver != null) return // already registered
+                val granted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+                } else {
+                    checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+                }
+                if (granted) {
+                    Log.d(TAG, "READ_MEDIA_IMAGES now granted — registering ScreenshotObserver")
+                    registerScreenshotObserver()
+                } else {
+                    handler.postDelayed(this, 15_000L)
+                }
+            }
+        }
+        handler.postDelayed(recheckRunnable, 15_000L)
+    }
+    
 
     override fun onInterrupt() {}
 
@@ -277,9 +383,16 @@ class ClipboardAccessibilityService : AccessibilityService() {
         super.onDestroy()
         firestoreListener?.remove()
         firestoreListener = null
+        clipboardChangedListener?.let {
+            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).removePrimaryClipChangedListener(it)
+        }
+        clipboardChangedListener = null
+        screenshotObserver?.let { contentResolver.unregisterContentObserver(it) }
+        screenshotObserver = null
         handler.removeCallbacksAndMessages(null)
         ignoreNextChange = false
         isRunning        = false
+        ImageTransferManager.stopServer(this)
     }
 
     // ── Accessibility event handling ──────────────────────────────────────────
@@ -358,7 +471,11 @@ class ClipboardAccessibilityService : AccessibilityService() {
                     if (triggerType != null) {
                         lastEventTime = eventTime
                         Log.d(TAG, "Copy detected: $triggerType")
-                        handler.postDelayed({ handleClipboardChange(triggerType) }, 50)
+                        // "Click (Copy Button)" events need extra time: Android 14 writes
+                        // screenshot images to the clipboard ~200-300 ms after the tap's
+                        // accessibility event fires. 750 ms is enough margin without feeling slow.
+                        val delay = if (triggerType == "Click (Copy Button)") 750L else 50L
+                        handler.postDelayed({ handleClipboardChange(triggerType) }, delay)
                     }
                 }
 
@@ -466,6 +583,8 @@ class ClipboardAccessibilityService : AccessibilityService() {
      */
     private fun handleClipboardChange(trigger: String = "Unknown") {
         if (ignoreNextChange) return
+        // Suppress echo when ImageTransferManager wrote an image to the clipboard.
+        if (ImageTransferManager.ignoreNextClipboardChange) return
         val now = System.currentTimeMillis()
         if (now - lastGhostLaunchTime < GHOST_LAUNCH_DEBOUNCE_MS) return
         lastGhostLaunchTime = now

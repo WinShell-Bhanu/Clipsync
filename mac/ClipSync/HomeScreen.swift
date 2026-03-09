@@ -297,6 +297,7 @@ struct HomeScreen: View {
             if !clipboardManager.isSyncPaused {
                 clipboardManager.startMonitoring()
                 clipboardManager.listenForAndroidClipboard()
+                ImageTransferManagerMac.shared.start()
             }
             withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
                 contentOpacity = 1
@@ -377,7 +378,7 @@ struct HomeScreen: View {
 
     private func encryptTestString(_ string: String) -> String {
         guard let data = string.data(using: .utf8) else { return "" }
-        let sharedSecretHex = Secrets.fallbackEncryptionKey
+        guard let sharedSecretHex = KeychainHelper.load(for: "encryption_key") else { return "" }
 
         do {
             let keyData = hexToData(hex: sharedSecretHex)
@@ -392,7 +393,7 @@ struct HomeScreen: View {
 
     private func decryptTestString(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
-        let sharedSecretHex = Secrets.fallbackEncryptionKey
+        guard let sharedSecretHex = KeychainHelper.load(for: "encryption_key") else { return nil }
 
         do {
             let keyData = hexToData(hex: sharedSecretHex)
@@ -699,6 +700,7 @@ struct CheckEncryptionCard: View {
 
 
 /// Single row in the clipboard history list. Content is masked until hovered.
+/// Image items show a compact label instead of a preview (RAM-friendly).
 struct ClipboardHistoryRow: View {
     let item: ClipboardItem
     let isHovered: Bool
@@ -714,7 +716,16 @@ struct ClipboardHistoryRow: View {
                     Spacer()
                 }
 
-                if isHovered {
+                if item.isImage {
+                    // No preview — lightweight text label to save RAM.
+                    HStack(spacing: 6) {
+                        Text("📸")
+                            .font(.system(size: 14))
+                        Text("Image copiée")
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundColor(.black.opacity(0.7))
+                    }
+                } else if isHovered {
                     Text(item.content.prefix(100) + (item.content.count > 100 ? "..." : ""))
                         .font(.system(size: 13))
                         .foregroundColor(.black.opacity(0.9))

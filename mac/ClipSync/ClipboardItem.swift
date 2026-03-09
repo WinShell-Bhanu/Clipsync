@@ -21,6 +21,16 @@ struct ClipboardItem: Identifiable, Equatable {
     let timestamp: Date
     let deviceName: String
     let direction: ClipboardDirection
+    /// `true` when this history entry represents an image transfer (no preview stored).
+    let isImage: Bool
+
+    init(content: String, timestamp: Date, deviceName: String, direction: ClipboardDirection, isImage: Bool = false) {
+        self.content = content
+        self.timestamp = timestamp
+        self.deviceName = deviceName
+        self.direction = direction
+        self.isImage = isImage
+    }
 
     /// Relative time string for display in the clipboard history list.
     var timeAgo: String {

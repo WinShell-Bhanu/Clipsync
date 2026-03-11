@@ -183,7 +183,7 @@ struct QRGenScreen: View {
                             onSelect: { country in
                                 selectedCountry = country
                                 showCountryPicker = false
-                                updateServerRegion(for: country)
+                                updateServerRegion(for: country, userInitiated: true)
                             }
                         )
                     }
@@ -397,7 +397,7 @@ struct QRGenScreen: View {
     // Parameters: country.
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
-    private func updateServerRegion(for country: String) {
+    private func updateServerRegion(for country: String, userInitiated: Bool = false) {
         let newRegion = RegionConfig.getOptimalServer(for: country)
         let currentRegion = UserDefaults.standard.string(forKey: "server_region") ?? "IN"
 
@@ -406,7 +406,12 @@ struct QRGenScreen: View {
         if newRegion != currentRegion {
             UserDefaults.standard.set(newRegion, forKey: "server_region")
             UserDefaults.standard.synchronize()
-            restartApp()
+            // Only restart when user explicitly changes region — never on auto-detection at startup
+            if userInitiated {
+                restartApp()
+            } else {
+                qrGenerator.generateQRCode()
+            }
         } else {
             qrGenerator.generateQRCode()
         }

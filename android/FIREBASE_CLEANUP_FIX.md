@@ -64,7 +64,7 @@ exports.cleanupNotifications = onSchedule({
 To apply this fix to your Firebase project, run:
 
 ```bash
-cd /Users/bunty/Documents/Clipsync
+cd /path/to/your/Clipsync/project
 firebase deploy --only functions
 ```
 

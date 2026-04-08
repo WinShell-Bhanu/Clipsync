@@ -150,14 +150,17 @@ object FirestoreManager {
      * [ 12-byte random IV ][ ciphertext ][ 16-byte GCM authentication tag ]
      * ```
      *
-     * If encryption fails for any reason, the function logs an error and returns [plainText]
-     * unencrypted as a last resort so that the clipboard content is not silently lost.
+     * If encryption fails for any reason, the function logs an error and returns `null`
+     * so the caller can decide how to handle the failure based on the user's
+     * [DeviceManager.getEncryptionFailurePolicy] setting. This prevents sensitive data
+     * from being silently sent as plaintext to Firestore.
      *
      * @param context   Used to retrieve the shared AES key from [DeviceManager].
      * @param plainText The clipboard text to encrypt.
-     * @return Base64-encoded (NO_WRAP) encrypted payload ready to be stored in Firestore.
+     * @return Base64-encoded (NO_WRAP) encrypted payload ready to be stored in Firestore,
+     *         or `null` if encryption failed.
      */
-    private fun encryptData(context: Context, plainText: String): String {
+    private fun encryptData(context: Context, plainText: String): String? {
         return try {
             val keySpec = javax.crypto.spec.SecretKeySpec(hexStringToByteArray(getSharedSecret(context)), "AES")
             val cipher  = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
@@ -176,7 +179,7 @@ object FirestoreManager {
             android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
             Log.e("FirestoreManager", "Encryption failed", e)
-            plainText // last-resort fallback: send unencrypted so content is not silently lost
+            null
         }
     }
 
@@ -339,9 +342,12 @@ object FirestoreManager {
      * Encrypts [text] with [encryptData] and writes it to the `clipboardItems` Firestore
      * collection as a new document.
      *
-     * The document records the pairing ID, the source device ID (so the listener on the
-     * same device can filter it out), and a server-generated timestamp. The server timestamp
-     * is used by the Mac app to query only items newer than the last item it has seen.
+     * If encryption fails, the behaviour depends on the user's encryption failure policy
+     * (see [DeviceManager.getEncryptionFailurePolicy]):
+     * - **never_allow** (default): the sync is skipped and [onFailure] is called. This
+     *   prevents sensitive clipboard data from being stored as plaintext in Firestore.
+     * - **always_allow**: the plaintext is sent as a last resort (the user has explicitly
+     *   opted in to this risk).
      *
      * @param context   Application context.
      * @param text      The plain-text clipboard content to encrypt and send.
@@ -362,8 +368,22 @@ object FirestoreManager {
 
         val encryptedContent = encryptData(context, text)
 
+        // Encryption failed — decide what to do based on user policy.
+        if (encryptedContent == null) {
+            val policy = DeviceManager.getEncryptionFailurePolicy(context)
+            if (policy == DeviceManager.ENCRYPTION_POLICY_ALWAYS_ALLOW) {
+                Log.w("FirestoreManager", "Encryption failed — sending plaintext (user policy: always_allow)")
+            } else {
+                Log.e("FirestoreManager", "Encryption failed — sync skipped (user policy: $policy)")
+                onFailure(Exception("Encryption failed and policy does not allow plaintext fallback"))
+                return
+            }
+        }
+
+        val contentToSend = encryptedContent ?: text
+
         val clipboardData = hashMapOf<String, Any>(
-            "content"        to encryptedContent,
+            "content"        to contentToSend,
             "pairingId"      to pairingId,
             "sourceDeviceId" to DeviceManager.getDeviceId(context),
             "timestamp"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),

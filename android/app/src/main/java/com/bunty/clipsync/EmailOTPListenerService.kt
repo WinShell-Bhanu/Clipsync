@@ -7,6 +7,7 @@ import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
+import androidx.preference.PreferenceManager
 
 /**
  * A [NotificationListenerService] that monitors email-app notifications for OTP codes and
@@ -174,7 +175,10 @@ class EmailOTPListenerService : NotificationListenerService() {
             val fullContent = "$title $text $bigText $subText"
             if (fullContent.isBlank()) return
 
-            if (containsOTPKeyword(fullContent)) {
+            val proximityDistance = PreferenceManager.getDefaultSharedPreferences(this)
+                .getInt(OTPListeningService.PREF_KEY_OTP_PROXIMITY, OTPListeningService.DEFAULT_OTP_PROXIMITY)
+
+            if (containsOTPKeyword(fullContent, proximityDistance)) {
                 val otpCode = extractOTP(fullContent)
 
                 // Only act if we found a new OTP that differs from the last one processed,
@@ -262,12 +266,35 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Returns `true` if [content] contains at least one keyword from [OTP_KEYWORDS].
-     * Lowercases [content] before comparison to ensure the check is case-insensitive.
+     * Returns `true` if [content] contains at least one keyword from [OTP_KEYWORDS]
+     * AND a digit sequence of 4–8 digits exists within [proximityDistance] characters
+     * of that keyword.
+     *
+     * The proximity requirement prevents false positives where a keyword appears in
+     * general text while an unrelated number exists elsewhere in the message.
+     *
+     * @param proximityDistance Max character distance between keyword and digit sequence.
+     *        Configurable via SharedPreferences key [OTPListeningService.PREF_KEY_OTP_PROXIMITY].
      */
-    private fun containsOTPKeyword(content: String): Boolean {
+    private fun containsOTPKeyword(content: String, proximityDistance: Int): Boolean {
         val lower = content.lowercase()
-        return OTP_KEYWORDS.any { keyword -> lower.contains(keyword) }
+        val digitPattern = Regex("""\d{4,8}""")
+        return OTP_KEYWORDS.any { keyword ->
+            var startIndex = 0
+            var found = false
+            while (startIndex < lower.length) {
+                val keywordIndex = lower.indexOf(keyword, startIndex)
+                if (keywordIndex == -1) break
+                val searchStart = maxOf(0, keywordIndex - proximityDistance)
+                val searchEnd = minOf(lower.length, keywordIndex + keyword.length + proximityDistance)
+                if (digitPattern.containsMatchIn(lower.substring(searchStart, searchEnd))) {
+                    found = true
+                    break
+                }
+                startIndex = keywordIndex + 1
+            }
+            found
+        }
     }
 
     /**

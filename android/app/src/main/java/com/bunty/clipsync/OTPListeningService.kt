@@ -7,6 +7,7 @@ import android.provider.Telephony
 import android.telephony.SmsMessage
 import android.util.Log
 import android.widget.Toast
+import androidx.preference.PreferenceManager
 
 /**
  * A [BroadcastReceiver] that intercepts incoming SMS messages and automatically extracts
@@ -48,6 +49,16 @@ class OTPListeningService : BroadcastReceiver() {
          * into several PDU fragments that each individually trigger SMS_RECEIVED.
          */
         private const val MIN_PROCESSING_INTERVAL = 1000L
+
+        /**
+         * SharedPreferences key for the OTP keyword proximity distance.
+         * Controls how close (in characters) a digit sequence must be to a keyword
+         * for the message to be considered an OTP. Lower values = stricter matching.
+         */
+        const val PREF_KEY_OTP_PROXIMITY = "otp_keyword_proximity_distance"
+
+        /** Default proximity distance in characters when no preference is set. */
+        const val DEFAULT_OTP_PROXIMITY = 60
 
         /**
          * Multilingual keyword corpus used to identify SMS messages that carry an OTP.
@@ -150,12 +161,14 @@ class OTPListeningService : BroadcastReceiver() {
         if (currentTime - lastProcessedTime < MIN_PROCESSING_INTERVAL) return
 
         try {
+            val proximityDistance = PreferenceManager.getDefaultSharedPreferences(appContext)
+                .getInt(PREF_KEY_OTP_PROXIMITY, DEFAULT_OTP_PROXIMITY)
             val messages = extractSmsMessages(intent)
 
             for (message in messages) {
                 val messageBody = message.messageBody ?: continue
 
-                if (containsOTPKeyword(messageBody)) {
+                if (containsOTPKeyword(messageBody, proximityDistance)) {
                     val otpCode = extractOTP(messageBody)
 
                     if (otpCode != null) {
@@ -193,13 +206,35 @@ class OTPListeningService : BroadcastReceiver() {
     }
 
     /**
-     * Returns `true` when [message] contains at least one entry from [OTP_KEYWORDS].
-     * The check is case-insensitive to handle inconsistent capitalisation in OTP SMSes
-     * (e.g. "OTP", "otp", "Otp" all match the same keyword).
+     * Returns `true` when [message] contains at least one entry from [OTP_KEYWORDS]
+     * AND a digit sequence of 4–8 digits exists within [proximityDistance] characters
+     * of that keyword.
+     *
+     * The proximity requirement prevents false positives where a keyword appears in
+     * general text while an unrelated number exists elsewhere in the message.
+     *
+     * @param proximityDistance Max character distance between keyword and digit sequence.
+     *        Configurable via SharedPreferences key [PREF_KEY_OTP_PROXIMITY].
      */
-    private fun containsOTPKeyword(message: String): Boolean {
+    private fun containsOTPKeyword(message: String, proximityDistance: Int): Boolean {
         val lowerMessage = message.lowercase()
-        return OTP_KEYWORDS.any { keyword -> lowerMessage.contains(keyword) }
+        val digitPattern = Regex("""\d{4,8}""")
+        return OTP_KEYWORDS.any { keyword ->
+            var startIndex = 0
+            var found = false
+            while (startIndex < lowerMessage.length) {
+                val keywordIndex = lowerMessage.indexOf(keyword, startIndex)
+                if (keywordIndex == -1) break
+                val searchStart = maxOf(0, keywordIndex - proximityDistance)
+                val searchEnd = minOf(lowerMessage.length, keywordIndex + keyword.length + proximityDistance)
+                if (digitPattern.containsMatchIn(lowerMessage.substring(searchStart, searchEnd))) {
+                    found = true
+                    break
+                }
+                startIndex = keywordIndex + 1
+            }
+            found
+        }
     }
 
     /**

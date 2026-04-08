@@ -21,11 +21,11 @@ class QRCodeGenerator: ObservableObject {
 
     private var sharedSecretHex: String {
         get {
-            if let savedKey = UserDefaults.standard.string(forKey: "encryption_key") {
+            if let savedKey = KeychainHelper.getEncryptionKey() {
                 return savedKey
             }
             let newKey = generateRandomHexKey()
-            UserDefaults.standard.set(newKey, forKey: "encryption_key")
+            KeychainHelper.setEncryptionKey(newKey)
             return newKey
         }
     }

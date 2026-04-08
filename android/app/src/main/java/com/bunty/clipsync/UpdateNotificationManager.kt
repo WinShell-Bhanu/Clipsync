@@ -77,16 +77,21 @@ object UpdateNotificationManager {
      * The expanded (BigText) style shows up to 150 characters of [releaseNotes] so the
      * user can quickly decide whether to update without leaving the notification shade.
      *
+     * When [isTrusted] is false, the notification title and body are modified to warn
+     * the user that the download URL comes from an unrecognised domain.
+     *
      * @param context      Application context required to build intents and post the notification.
      * @param version      Human-readable new version string, e.g. `"1.2.0"`.
      * @param releaseNotes Short summary of what changed; truncated to 150 chars in the UI.
      * @param downloadUrl  Direct URL to open on tap; falls back to [GITHUB_RELEASES_URL] if blank.
+     * @param isTrusted    Whether the [downloadUrl] passed the domain allowlist check.
      */
     fun showUpdateNotification(
         context: Context,
         version: String,
         releaseNotes: String,
-        downloadUrl: String = GITHUB_RELEASES_URL
+        downloadUrl: String = GITHUB_RELEASES_URL,
+        isTrusted: Boolean = true
     ) {
         createNotificationChannel(context)
 
@@ -118,20 +123,36 @@ object UpdateNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // When the URL is untrusted, modify the notification to warn the user so they
+        // can make an informed decision before tapping through to an unknown domain.
+        val title: String
+        val shortText: String
+        val expandedText: String
+
+        if (isTrusted) {
+            title = "ClipSync Update Available 🚀"
+            shortText = "Version $version is ready to download!"
+            expandedText = "Version $version is ready!\n\n${releaseNotes.take(150)}"
+        } else {
+            val host = UrlAllowlistManager.extractHost(resolvedUrl)
+            title = "⚠️ Update from untrusted source"
+            shortText = "Version $version links to $host (not in your trusted domains)"
+            expandedText = "⚠️ Version $version links to an untrusted domain: $host\n\n" +
+                "This URL was not recognised as a trusted source. " +
+                "Proceed only if you trust this domain.\n\n${releaseNotes.take(100)}"
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle("ClipSync Update Available 🚀")
-            .setContentText("Version $version is ready to download!")
-            .setStyle(
-                NotificationCompat.BigTextStyle()
-                    .bigText("Version $version is ready!\n\n${releaseNotes.take(150)}")
-            )
+            .setContentTitle(title)
+            .setContentText(shortText)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(expandedText))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
             .addAction(
                 R.drawable.ic_launcher_foreground,
-                "View on GitHub",
+                if (isTrusted) "View on GitHub" else "Open Anyway",
                 githubActionPendingIntent
             )
             .addAction(
@@ -169,13 +190,15 @@ object UpdateNotificationManager {
      * @param actionLabel Text label for the primary action button, e.g. `"Give Feedback"`.
      * @param actionUrl   URL to open when the body or action button is tapped. Pass an empty
      *                    string to open [MainActivity] instead of a browser URL.
+     * @param isTrusted   Whether the [actionUrl] passed the domain allowlist check.
      */
     fun showAnnouncementNotification(
         context: Context,
         title: String,
         body: String,
         actionLabel: String = "Open",
-        actionUrl: String = ""
+        actionUrl: String = "",
+        isTrusted: Boolean = true
     ) {
         createNotificationChannel(context)
 
@@ -213,17 +236,31 @@ object UpdateNotificationManager {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        // When the URL is from an untrusted domain, prepend a warning to the notification
+        // so the user is aware before tapping through.
+        val displayTitle: String
+        val displayBody: String
+
+        if (!isTrusted && actionUrl.isNotBlank()) {
+            val host = UrlAllowlistManager.extractHost(actionUrl)
+            displayTitle = "⚠️ $title"
+            displayBody = "Links to untrusted domain: $host\n\n$body"
+        } else {
+            displayTitle = title
+            displayBody = body
+        }
+
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setContentTitle(displayTitle)
+            .setContentText(displayBody)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(displayBody))
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
             .setContentIntent(contentPendingIntent)
             .addAction(
                 R.drawable.ic_launcher_foreground,
-                actionLabel,
+                if (isTrusted || actionUrl.isBlank()) actionLabel else "Open Anyway",
                 actionPendingIntent
             )
             .addAction(

@@ -209,7 +209,10 @@ class ClipboardManager: ObservableObject {
                       let sourceDeviceId = doc["sourceDeviceId"] as? String,
                       sourceDeviceId != macDeviceId else { return }
 
-                let content = self.decrypt(encryptedContent) ?? encryptedContent
+                guard let content = self.decrypt(encryptedContent) else {
+                    print("ClipboardManager: Decryption failed — skipping incoming clipboard item")
+                    return
+                }
 
                 guard content != self.lastCopiedText else { return }
 

@@ -59,6 +59,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import com.bunty.clipsync.R
@@ -213,14 +215,27 @@ fun Homescreen(
     // "Later" option that simply dismisses and clears the stored update info.
     // =========================================================================
     if (showUpdateDialog && updateInfo != null) {
+        val isUpdateUrlTrusted = UrlAllowlistManager.isUrlTrusted(context, updateInfo!!.downloadUrl)
+
         AlertDialog(
-            onDismissRequest = { 
+            onDismissRequest = {
                 showUpdateDialog = false
                 UpdateNotificationManager.clearPendingUpdate(context)
             },
-            title = { Text(text = "Update Available 🚀") },
+            title = {
+                Text(text = if (isUpdateUrlTrusted) "Update Available 🚀" else "⚠️ Update from untrusted source")
+            },
             text = {
                 Column {
+                    if (!isUpdateUrlTrusted) {
+                        Text(
+                            text = "Warning: This update links to an unrecognised domain (${UrlAllowlistManager.extractHost(updateInfo!!.downloadUrl)}). Proceed only if you trust this source.",
+                            color = Color(0xFFFF9500),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
                     Text("Version ${updateInfo!!.version} is now available!")
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
@@ -240,12 +255,12 @@ fun Homescreen(
                         UpdateNotificationManager.clearPendingUpdate(context)
                     }
                 ) {
-                    Text("Download")
+                    Text(if (isUpdateUrlTrusted) "Download" else "Open Anyway")
                 }
             },
             dismissButton = {
                 TextButton(
-                    onClick = { 
+                    onClick = {
                         showUpdateDialog = false
                         UpdateNotificationManager.clearPendingUpdate(context)
                     }
@@ -471,6 +486,17 @@ fun Homescreen(
                             }
                         }
                     }
+
+                    // =============================================================
+                    // TRUSTED DOMAINS SECTION
+                    // Displays the URL domain allowlist used to validate URLs from
+                    // FCM push notifications. Default domains cannot be removed.
+                    // Users can add or remove custom trusted domains.
+                    // =============================================================
+                    TrustedDomainsSection(
+                        fontFamily = robotoFontFamily,
+                        scale = scale
+                    )
 
                     // =============================================================
                     // SYSTEM STATUS SECTION
@@ -959,6 +985,201 @@ fun ActionButton(text: String, icon: ImageVector, backgroundColor: Color, fontFa
                 fontWeight = FontWeight.SemiBold,
                 fontSize = (17 * scale).coerceIn(15f, 17f).sp,
                 color = backgroundColor
+            )
+        }
+    }
+}
+
+
+/**
+ * Composable section that displays and manages the trusted URL domain allowlist.
+ *
+ * Shows default domains (non-removable) and user-added domains (removable via tap).
+ * Includes a text field for adding new custom domains. Domains are displayed as
+ * chip-like pills — default domains in blue, user domains in green with an "×" to remove.
+ *
+ * @param fontFamily The Roboto [FontFamily] for consistent typography.
+ * @param scale Responsive scale factor derived from screen dimensions.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun TrustedDomainsSection(fontFamily: FontFamily, scale: Float = 1f) {
+    val context = LocalContext.current
+    var userDomains by remember { mutableStateOf(UrlAllowlistManager.getUserDomains(context)) }
+    var newDomain by remember { mutableStateOf("") }
+    var showAddField by remember { mutableStateOf(false) }
+
+    Column {
+        SectionHeader(text = "Trusted Domains", fontFamily = fontFamily, scale = scale)
+
+        InnerWhiteCard(scale = scale) {
+            Column(modifier = Modifier.padding((20 * scale).dp)) {
+                Text(
+                    text = "URLs from push notifications are checked against these domains. Untrusted URLs show a warning.",
+                    fontFamily = fontFamily,
+                    fontSize = (13 * scale).coerceIn(11f, 13f).sp,
+                    color = Color(0xFF3C3C43).copy(alpha = 0.6f),
+                    lineHeight = (18 * scale).coerceIn(14f, 18f).sp
+                )
+
+                Spacer(modifier = Modifier.height((16 * scale).dp))
+
+                // Display default (built-in) domains as non-removable chips.
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy((8 * scale).dp),
+                    verticalArrangement = Arrangement.spacedBy((8 * scale).dp)
+                ) {
+                    UrlAllowlistManager.DEFAULT_DOMAINS.sorted().forEach { domain ->
+                        DomainChip(
+                            domain = domain,
+                            isDefault = true,
+                            fontFamily = fontFamily,
+                            scale = scale,
+                            onRemove = {}
+                        )
+                    }
+                    userDomains.sorted().forEach { domain ->
+                        DomainChip(
+                            domain = domain,
+                            isDefault = false,
+                            fontFamily = fontFamily,
+                            scale = scale,
+                            onRemove = {
+                                UrlAllowlistManager.removeUserDomain(context, domain)
+                                userDomains = UrlAllowlistManager.getUserDomains(context)
+                            }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height((16 * scale).dp))
+
+                if (showAddField) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        androidx.compose.material3.OutlinedTextField(
+                            value = newDomain,
+                            onValueChange = { newDomain = it.lowercase().trim() },
+                            placeholder = {
+                                Text(
+                                    "example.com",
+                                    fontSize = (14 * scale).coerceIn(12f, 14f).sp
+                                )
+                            },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f),
+                            textStyle = androidx.compose.ui.text.TextStyle(
+                                fontSize = (14 * scale).coerceIn(12f, 14f).sp,
+                                fontFamily = fontFamily
+                            )
+                        )
+                        Spacer(modifier = Modifier.width((8 * scale).dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape((16 * scale).dp))
+                                .background(Color(0xFF34C759))
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null
+                                ) {
+                                    if (newDomain.isNotBlank() && newDomain.contains(".")) {
+                                        UrlAllowlistManager.addUserDomain(context, newDomain)
+                                        userDomains = UrlAllowlistManager.getUserDomains(context)
+                                        newDomain = ""
+                                        showAddField = false
+                                    }
+                                }
+                                .padding(horizontal = (14 * scale).dp, vertical = (8 * scale).dp)
+                        ) {
+                            Text(
+                                text = "Add",
+                                fontFamily = fontFamily,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = (14 * scale).coerceIn(12f, 14f).sp,
+                                color = Color.White
+                            )
+                        }
+                    }
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape((16 * scale).dp))
+                            .background(Color(0xFF007AFF).copy(alpha = 0.1f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) { showAddField = true }
+                            .padding(horizontal = (14 * scale).dp, vertical = (8 * scale).dp)
+                    ) {
+                        Text(
+                            text = "+ Add Domain",
+                            fontFamily = fontFamily,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = (14 * scale).coerceIn(12f, 14f).sp,
+                            color = Color(0xFF007AFF)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+/**
+ * A chip-style pill displaying a single domain name.
+ *
+ * Default domains are shown in blue and cannot be removed. User-added domains are
+ * shown in green with an "×" suffix that triggers removal on tap.
+ *
+ * @param domain The domain string to display.
+ * @param isDefault True if this is a built-in default domain (non-removable).
+ * @param fontFamily Font family for the label text.
+ * @param scale Responsive scale factor.
+ * @param onRemove Callback invoked when a user domain's "×" is tapped.
+ */
+@Composable
+fun DomainChip(
+    domain: String,
+    isDefault: Boolean,
+    fontFamily: FontFamily,
+    scale: Float = 1f,
+    onRemove: () -> Unit
+) {
+    val chipColor = if (isDefault) Color(0xFF007AFF) else Color(0xFF34C759)
+
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape((14 * scale).dp))
+            .background(chipColor.copy(alpha = 0.1f))
+            .then(
+                if (!isDefault) {
+                    Modifier.clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) { onRemove() }
+                } else Modifier
+            )
+            .padding(horizontal = (12 * scale).dp, vertical = (6 * scale).dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = domain,
+            fontFamily = fontFamily,
+            fontWeight = FontWeight.Medium,
+            fontSize = (13 * scale).coerceIn(11f, 13f).sp,
+            color = chipColor
+        )
+        if (!isDefault) {
+            Spacer(modifier = Modifier.width((6 * scale).dp))
+            Text(
+                text = "×",
+                fontFamily = fontFamily,
+                fontWeight = FontWeight.Bold,
+                fontSize = (14 * scale).coerceIn(12f, 14f).sp,
+                color = chipColor.copy(alpha = 0.7f)
             )
         }
     }

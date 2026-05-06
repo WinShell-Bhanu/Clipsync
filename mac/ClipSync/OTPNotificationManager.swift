@@ -90,10 +90,19 @@ class OTPNotificationManager: ObservableObject {
                         let age = Date().timeIntervalSince(timestamp.dateValue())
 
                         if age < 30 {
-                            if let encryptedOTP = data["encryptedOTP"] as? String,
-                               let decryptedOTP = self.decrypt(encryptedOTP),
-                               self.lastOTPCode != decryptedOTP {
-                                self.handleOTPDetected(otpCode: decryptedOTP)
+                            if let encryptedOTP = data["encryptedOTP"] as? String {
+                                let isEncrypted = data["isEncrypted"] as? Bool ?? true
+
+                                let otpCode: String?
+                                if isEncrypted {
+                                    otpCode = self.decrypt(encryptedOTP)
+                                } else {
+                                    otpCode = encryptedOTP
+                                }
+
+                                if let otpCode = otpCode, self.lastOTPCode != otpCode {
+                                    self.handleOTPDetected(otpCode: otpCode)
+                                }
                             }
                         }
                     }

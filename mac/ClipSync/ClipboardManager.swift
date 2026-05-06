@@ -209,24 +209,33 @@ class ClipboardManager: ObservableObject {
                       let sourceDeviceId = doc["sourceDeviceId"] as? String,
                       sourceDeviceId != macDeviceId else { return }
 
-                guard let content = self.decrypt(encryptedContent) else {
-                    print("ClipboardManager: Decryption failed — skipping incoming clipboard item")
+                let isEncrypted = doc["isEncrypted"] as? Bool ?? true
+
+                let content: String?
+                if isEncrypted {
+                    content = self.decrypt(encryptedContent)
+                } else {
+                    content = encryptedContent
+                }
+
+                guard let finalContent = content else {
+                    print("ClipboardManager: Failed to process clipboard item")
                     return
                 }
 
-                guard content != self.lastCopiedText else { return }
+                guard finalContent != self.lastCopiedText else { return }
 
                 DispatchQueue.main.async { [weak self] in
                     guard let self = self else { return }
                     self.ignoreNextChange = true
                     self.pasteboard.clearContents()
-                    self.pasteboard.setString(content, forType: .string)
-                    self.lastCopiedText = content
+                    self.pasteboard.setString(finalContent, forType: .string)
+                    self.lastCopiedText = finalContent
 
-                    if let lastItem = self.history.first, lastItem.content == content { return }
+                    if let lastItem = self.history.first, lastItem.content == finalContent { return }
 
                     let newItem = ClipboardItem(
-                        content: content,
+                        content: finalContent,
                         timestamp: Date(),
                         deviceName: PairingManager.shared.pairedDeviceName,
                         direction: .received

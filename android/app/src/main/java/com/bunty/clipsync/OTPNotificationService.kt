@@ -79,6 +79,7 @@ object OTPNotificationService {
             val notificationData = hashMapOf<String, Any>(
                 "type"             to "OTP_NOTIFICATION",
                 "encryptedOTP"     to otpToSend,
+                "isEncrypted"      to (encryptedOTP != null),
                 "pairingId"        to pairingId,
                 "sourceDeviceId"   to deviceId,
                 "sourceDeviceName" to deviceName,

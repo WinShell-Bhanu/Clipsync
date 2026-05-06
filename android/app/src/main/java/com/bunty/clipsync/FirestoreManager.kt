@@ -384,6 +384,7 @@ object FirestoreManager {
 
         val clipboardData = hashMapOf<String, Any>(
             "content"        to contentToSend,
+            "isEncrypted"    to (encryptedContent != null),
             "pairingId"      to pairingId,
             "sourceDeviceId" to DeviceManager.getDeviceId(context),
             "timestamp"      to com.google.firebase.firestore.FieldValue.serverTimestamp(),

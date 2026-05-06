@@ -215,7 +215,11 @@ fun Homescreen(
     // "Later" option that simply dismisses and clears the stored update info.
     // =========================================================================
     if (showUpdateDialog && updateInfo != null) {
-        val isUpdateUrlTrusted = UrlAllowlistManager.isUrlTrusted(context, updateInfo!!.downloadUrl)
+        // Fallback to GitHub releases if downloadUrl is blank
+        val resolvedUrl = updateInfo!!.downloadUrl.ifBlank { 
+            "https://github.com/WinShell-Bhanu/Clipsync/releases/latest" 
+        }
+        val isUpdateUrlTrusted = UrlAllowlistManager.isUrlTrusted(context, resolvedUrl)
 
         AlertDialog(
             onDismissRequest = {
@@ -229,7 +233,7 @@ fun Homescreen(
                 Column {
                     if (!isUpdateUrlTrusted) {
                         Text(
-                            text = "Warning: This update links to an unrecognised domain (${UrlAllowlistManager.extractHost(updateInfo!!.downloadUrl)}). Proceed only if you trust this source.",
+                            text = "Warning: This update links to an unrecognised domain (${UrlAllowlistManager.extractHost(resolvedUrl)}). Proceed only if you trust this source.",
                             color = Color(0xFFFF9500),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.SemiBold
@@ -249,7 +253,7 @@ fun Homescreen(
                 TextButton(
                     onClick = {
                         // Launch the browser to the release download URL, then dismiss.
-                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(updateInfo!!.downloadUrl))
+                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(resolvedUrl))
                         context.startActivity(intent)
                         showUpdateDialog = false
                         UpdateNotificationManager.clearPendingUpdate(context)

@@ -32,16 +32,8 @@ class OTPNotificationManager: ObservableObject {
     private var currentBubbleWindow: OTPBubbleWindow?
 
 
-    private var sharedSecretHex: String? {
-        // Keychain is the canonical store; UserDefaults is a migration fallback only.
-        if let key = KeychainHelper.load(for: "encryption_key") { return key }
-        if let key = UserDefaults.standard.string(forKey: "encryption_key") {
-            KeychainHelper.save(key, for: "encryption_key")
-            UserDefaults.standard.removeObject(forKey: "encryption_key")
-            return key
-        }
-        // M2 fix: return nil instead of fallback key
-        return nil
+    private var sharedSecretHex: String {
+        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
     }
 
 
@@ -131,15 +123,6 @@ class OTPNotificationManager: ObservableObject {
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                 self?.showOTPIndicator = false
-            }
-
-            // U3 fix: auto-clear OTP from pasteboard after 45 seconds
-            let otpToClear = otpCode
-            DispatchQueue.main.asyncAfter(deadline: .now() + 45.0) {
-                let pb = NSPasteboard.general
-                if let current = pb.string(forType: .string), current == otpToClear {
-                    pb.clearContents()
-                }
             }
         }
     }
@@ -236,10 +219,9 @@ class OTPNotificationManager: ObservableObject {
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func decrypt(_ base64String: String) -> String? {
         guard let data = Data(base64Encoded: base64String) else { return nil }
-        guard let secretHex = sharedSecretHex else { return nil }
 
         do {
-            let keyData = hexToData(hex: secretHex)
+            let keyData = hexToData(hex: sharedSecretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.SealedBox(combined: data)
             let decryptedData = try AES.GCM.open(sealedBox, using: key)

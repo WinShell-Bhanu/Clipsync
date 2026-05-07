@@ -4,14 +4,13 @@
 // ClipboardManager.swift
 // Singleton that polls NSPasteboard every 300 ms for changes, encrypts and uploads
 // content to Firestore, and listens for incoming clipboard items from Android.
-// Uses AES-GCM with a shared key stored in UserDefaults.
+// Uses AES-GCM with a shared key stored in the macOS Keychain.
 
 import Foundation
 import AppKit
 import FirebaseFirestore
 import Combine
 import CryptoKit
-import os
 
 // MARK: - ClipboardManager
 
@@ -25,10 +24,10 @@ class ClipboardManager: ObservableObject {
     @Published var lastSyncedTime: Date?
 
     var syncToMac: Bool {
-        UserDefaults.standard.object(forKey: "syncToMac") as? Bool ?? true
+        UserDefaults.standard.bool(forKey: "syncToMac")
     }
     var syncFromMac: Bool {
-        UserDefaults.standard.object(forKey: "syncFromMac") as? Bool ?? true
+        UserDefaults.standard.bool(forKey: "syncFromMac")
     }
 
     private let pasteboard = NSPasteboard.general
@@ -40,21 +39,11 @@ class ClipboardManager: ObservableObject {
     private let db = FirebaseManager.shared.db
     private var clipboardListener: ListenerRegistration?
 
-    private var sharedSecretHex: String? {
-        // Keychain is the canonical store; UserDefaults is a migration fallback only.
-        if let key = KeychainHelper.load(for: "encryption_key") { return key }
-        // During migration the key may still be in UserDefaults on first run after update.
-        if let key = UserDefaults.standard.string(forKey: "encryption_key") {
-            KeychainHelper.save(key, for: "encryption_key")
-            UserDefaults.standard.removeObject(forKey: "encryption_key")
-            return key
-        }
-        // M2 fix: do NOT return Secrets.fallbackEncryptionKey — return nil so callers abort.
-        return nil
+    private var sharedSecretHex: String {
+        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
     }
 
     private var isListenerActive = false
-    private let logger = Logger(subsystem: "com.OP.ClipSync", category: "Clipboard")
     private var lastListenerUpdate = Date()
 
     // MARK: - Monitoring
@@ -66,9 +55,10 @@ class ClipboardManager: ObservableObject {
 
         lastChangeCount = pasteboard.changeCount
 
-        let newTimer = DispatchSource.makeTimerSource(queue: DispatchQueue.main)
+        let queue = DispatchQueue(label: "com.clipsync.clipboard.monitor", qos: .userInitiated)
+        let newTimer = DispatchSource.makeTimerSource(queue: queue)
 
-        newTimer.schedule(deadline: .now(), repeating: .milliseconds(1000), leeway: .milliseconds(100))
+        newTimer.schedule(deadline: .now(), repeating: .milliseconds(300), leeway: .milliseconds(50))
 
         newTimer.setEventHandler { [weak self] in
             self?.checkClipboard()
@@ -85,11 +75,9 @@ class ClipboardManager: ObservableObject {
         if isSyncPaused {
             stopMonitoring()
             stopListening()
-            ImageTransferManagerMac.shared.stop()
         } else {
             startMonitoring()
             listenForAndroidClipboard()
-            ImageTransferManagerMac.shared.start()
         }
     }
 
@@ -103,22 +91,6 @@ class ClipboardManager: ObservableObject {
 
     func clearHistory() {
         history.removeAll()
-    }
-
-    /// Adds a lightweight image entry to the history (no pixel data retained).
-    func addImageHistoryEntry(direction: ClipboardDirection, deviceName: String) {
-        DispatchQueue.main.async { [weak self] in
-            guard let self = self else { return }
-            let item = ClipboardItem(
-                content: "",
-                timestamp: Date(),
-                deviceName: deviceName,
-                direction: direction,
-                isImage: true
-            )
-            self.history.insert(item, at: 0)
-            self.lastSyncedTime = Date()
-        }
     }
 
 
@@ -223,32 +195,22 @@ class ClipboardManager: ObservableObject {
 
                 if self.isSyncPaused || !self.syncToMac { return }
 
-                if let error = error {
-                    self.logger.error("ClipSync: Listener error — \(error.localizedDescription)")
+                if error != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 2.0) { [weak self] in
                         self?.listenForAndroidClipboard(retryCount: 0)
                     }
                     return
                 }
 
-                guard let documents = snapshot?.documents, !documents.isEmpty else {
-                    self.logger.debug("ClipSync: Listener fired — 0 documents for pairingId=\(pairingId)")
-                    return
-                }
+                guard let documents = snapshot?.documents, !documents.isEmpty else { return }
                 let doc = documents[0].data()
 
                 guard let encryptedContent = doc["content"] as? String,
                       let sourceDeviceId = doc["sourceDeviceId"] as? String,
-                      sourceDeviceId != macDeviceId else {
-                    self.logger.warning("ClipSync: Skipping doc — missing fields or self-sent (sourceId=\(doc["sourceDeviceId"] as? String ?? "nil"), macId=\(macDeviceId))")
-                    return
-                }
+                      sourceDeviceId != macDeviceId else { return }
 
-                self.logger.info("ClipSync: Received Android clipboard — sourceId=\(sourceDeviceId), contentLen=\(encryptedContent.count)")
-
-                // C4 fix: if decryption fails, do NOT paste raw ciphertext into the clipboard.
                 guard let content = self.decrypt(encryptedContent) else {
-                    self.logger.error("ClipSync: Decryption failed — key available=\(self.sharedSecretHex != nil), contentLen=\(encryptedContent.count)")
+                    print("ClipboardManager: Decryption failed — skipping incoming clipboard item")
                     return
                 }
 
@@ -316,10 +278,9 @@ class ClipboardManager: ObservableObject {
     /// AES-GCM encrypts a UTF-8 string and returns a Base64-encoded ciphertext.
     private func encrypt(_ string: String) -> String? {
         guard let data = string.data(using: .utf8) else { return nil }
-        guard let secretHex = sharedSecretHex else { return nil }
 
         do {
-            let keyData = hexToData(hex: secretHex)
+            let keyData = hexToData(hex: sharedSecretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.seal(data, using: key)
             return sealedBox.combined?.base64EncodedString()
@@ -331,23 +292,15 @@ class ClipboardManager: ObservableObject {
 
     /// AES-GCM decrypts a Base64-encoded ciphertext and returns the plain UTF-8 string.
     private func decrypt(_ base64String: String) -> String? {
-        guard let data = Data(base64Encoded: base64String) else {
-            logger.error("ClipSync: decrypt — invalid base64 input (len=\(base64String.count))")
-            return nil
-        }
-        guard let secretHex = sharedSecretHex else {
-            logger.error("ClipSync: decrypt — no encryption key in Keychain")
-            return nil
-        }
+        guard let data = Data(base64Encoded: base64String) else { return nil }
 
         do {
-            let keyData = hexToData(hex: secretHex)
+            let keyData = hexToData(hex: sharedSecretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.SealedBox(combined: data)
             let decryptedData = try AES.GCM.open(sealedBox, using: key)
             return String(data: decryptedData, encoding: .utf8)
         } catch {
-            logger.error("ClipSync: AES-GCM decryption threw — \(error.localizedDescription), dataLen=\(data.count), keyLen=\(secretHex.count)")
             return nil
         }
     }

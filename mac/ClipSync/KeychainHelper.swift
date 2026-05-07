@@ -1,84 +1,86 @@
 // KeychainHelper.swift
-// Thin wrapper around SecItem* for storing the AES session key in the macOS Keychain
-// instead of UserDefaults (which is a plain plist readable by any process running as
-// the same user).
-//
-// Usage:
-//   KeychainHelper.save("deadbeef...", for: "encryption_key")
-//   let key = KeychainHelper.load(for: "encryption_key")
-//   KeychainHelper.delete(for: "encryption_key")
+// Provides secure storage for the AES-256 encryption key using the macOS Keychain
+// instead of UserDefaults. Includes one-time migration from UserDefaults.
 
 import Foundation
+import Security
 
 enum KeychainHelper {
+    private static let service = "com.clipsync.encryption"
+    private static let account = "encryption_key"
 
-    private static let service = "com.OP.ClipSync.keys"
+    // MARK: - Public API
 
-    // MARK: - Write
+    /// Retrieves the encryption key, migrating from UserDefaults on first access if needed.
+    static func getEncryptionKey() -> String? {
+        if let key = readFromKeychain() {
+            return key
+        }
 
-    /// Stores a UTF-8 string in the Keychain under the given account key.
-    /// Silently overwrites any existing value for the same key.
-    @discardableResult
-    static func save(_ value: String, for account: String) -> Bool {
-        guard let data = value.data(using: .utf8) else { return false }
+        // Migration: move key from UserDefaults to Keychain
+        if let legacyKey = UserDefaults.standard.string(forKey: "encryption_key") {
+            if saveToKeychain(legacyKey) {
+                UserDefaults.standard.removeObject(forKey: "encryption_key")
+            }
+            return legacyKey
+        }
 
-        // Delete any existing item first so SecItemAdd never returns errSecDuplicateItem.
-        delete(for: account)
-
-        let query: [String: Any] = [
-            kSecClass        as String: kSecClassGenericPassword,
-            kSecAttrService  as String: service,
-            kSecAttrAccount  as String: account,
-            kSecValueData    as String: data
-        ]
-        return SecItemAdd(query as CFDictionary, nil) == errSecSuccess
+        return nil
     }
 
-    // MARK: - Read
-
-    /// Returns the value stored for `account`, or `nil` if nothing is stored yet.
-    static func load(for account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass        as String: kSecClassGenericPassword,
-            kSecAttrService  as String: service,
-            kSecAttrAccount  as String: account,
-            kSecReturnData   as String: true,
-            kSecMatchLimit   as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+    /// Stores a new encryption key in the Keychain.
+    @discardableResult
+    static func setEncryptionKey(_ key: String) -> Bool {
+        // Delete any existing key first, then save
+        deleteFromKeychain()
+        return saveToKeychain(key)
     }
 
-    // MARK: - Delete
+    // MARK: - Keychain Operations
 
-    /// Removes the Keychain item for `account`. Silently succeeds if nothing was stored.
-    @discardableResult
-    static func delete(for account: String) -> Bool {
+    private static func readFromKeychain() -> String? {
         let query: [String: Any] = [
-            kSecClass       as String: kSecClassGenericPassword,
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+
+        guard status == errSecSuccess,
+              let data = result as? Data,
+              let key = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        return key
+    }
+
+    private static func saveToKeychain(_ key: String) -> Bool {
+        guard let data = key.data(using: .utf8) else { return false }
+
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+
+        let status = SecItemAdd(query as CFDictionary, nil)
+        return status == errSecSuccess
+    }
+
+    private static func deleteFromKeychain() {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account
         ]
-        let status = SecItemDelete(query as CFDictionary)
-        return status == errSecSuccess || status == errSecItemNotFound
-    }
 
-    // MARK: - Migration helper
-
-    /// Migrates a value stored in UserDefaults to the Keychain.
-    /// M1 fix: only removes from UserDefaults if the Keychain save succeeds,
-    /// so the key is never lost if save() fails.
-    static func migrateFromUserDefaults(udKey: String, keychainAccount: String) {
-        guard let value = UserDefaults.standard.string(forKey: udKey) else { return }
-        if load(for: keychainAccount) == nil {
-            guard save(value, for: keychainAccount) else {
-                // Save failed — leave the value in UserDefaults so it isn't lost.
-                print("⚠️ KeychainHelper: migration of '\(udKey)' failed — keeping in UserDefaults")
-                return
-            }
-        }
-        UserDefaults.standard.removeObject(forKey: udKey)
+        SecItemDelete(query as CFDictionary)
     }
 }

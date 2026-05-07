@@ -98,6 +98,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     val downloadUrl = remoteMessage.data["downloadUrl"] ?: ""
                     val releaseNotes = remoteMessage.data["releaseNotes"] ?: "New update available!"
 
+                    // Validate the download URL against the trusted-domain allowlist.
+                    val isTrusted = UrlAllowlistManager.isUrlTrusted(applicationContext, downloadUrl)
+
                     // Persist update details so MainActivity can present a download dialog even
                     // if the user dismissed or never saw the notification.
                     UpdateNotificationManager.savePendingUpdate(
@@ -108,11 +111,13 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     )
 
                     // Post an immediate status-bar notification so the user is informed right away.
+                    // If the URL is untrusted, the notification will include a warning.
                     UpdateNotificationManager.showUpdateNotification(
                         applicationContext,
                         version,
                         releaseNotes,
-                        downloadUrl
+                        downloadUrl,
+                        isTrusted
                     )
                 }
 
@@ -123,6 +128,9 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     val actionLabel = remoteMessage.data["actionLabel"] ?: "Open"
                     val actionUrl   = remoteMessage.data["actionUrl"]   ?: ""
 
+                    // Validate the action URL against the trusted-domain allowlist.
+                    val isTrusted = UrlAllowlistManager.isUrlTrusted(applicationContext, actionUrl)
+
                     // Guard against an empty body to prevent a content-free notification appearing
                     // in the shade, which would confuse or annoy the user.
                     if (body.isNotEmpty()) {
@@ -131,7 +139,8 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                             title,
                             body,
                             actionLabel,
-                            actionUrl
+                            actionUrl,
+                            isTrusted
                         )
                     }
                 }

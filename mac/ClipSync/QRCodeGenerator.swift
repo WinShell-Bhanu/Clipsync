@@ -21,17 +21,11 @@ class QRCodeGenerator: ObservableObject {
 
     private var sharedSecretHex: String {
         get {
-            // Migrate any key that was previously stored in UserDefaults to the Keychain.
-            KeychainHelper.migrateFromUserDefaults(udKey: "encryption_key", keychainAccount: "encryption_key")
-
-            if let savedKey = KeychainHelper.load(for: "encryption_key") {
+            if let savedKey = KeychainHelper.getEncryptionKey() {
                 return savedKey
             }
-            // First launch: generate a new key and persist it in the Keychain.
             let newKey = generateRandomHexKey()
-            if !KeychainHelper.save(newKey, for: "encryption_key") {
-                print("⚠️ [\(#function)] KeychainHelper.save returned false while saving encryption key for account \"encryption_key\". The key may not be persisted in the Keychain.")
-            }
+            KeychainHelper.setEncryptionKey(newKey)
             return newKey
         }
     }

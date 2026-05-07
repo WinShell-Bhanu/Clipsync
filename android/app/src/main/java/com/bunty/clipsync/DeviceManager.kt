@@ -47,6 +47,15 @@ object DeviceManager {
     private const val KEY_SYNC_TO_MAC        = "sync_to_mac"
     private const val KEY_SYNC_FROM_MAC      = "sync_from_mac"
     private const val KEY_REGION             = "server_region"
+    private const val KEY_ENCRYPTION_FAILURE_POLICY = "encryption_failure_policy"
+
+    /**
+     * Policy values for [getEncryptionFailurePolicy]:
+     * - [ENCRYPTION_POLICY_NEVER_ALLOW]: Never send unencrypted data (default — fail safe).
+     * - [ENCRYPTION_POLICY_ALWAYS_ALLOW]: Always fall back to plaintext on encryption failure.
+     */
+    const val ENCRYPTION_POLICY_NEVER_ALLOW  = "never_allow"
+    const val ENCRYPTION_POLICY_ALWAYS_ALLOW = "always_allow"
 
     /**
      * Stores the Firestore region that was active when Firebase was initialised in
@@ -355,6 +364,27 @@ object DeviceManager {
      */
     fun saveEncryptionKey(context: Context, key: String) {
         getPrefs(context).edit().putString(KEY_ENCRYPTION_KEY, key).apply()
+    }
+
+    // ── Encryption failure policy ──────────────────────────────────────────────
+
+    /**
+     * Returns the user's chosen policy for what to do when AES encryption fails.
+     *
+     * Defaults to [ENCRYPTION_POLICY_NEVER_ALLOW] (skip sync) so that sensitive data
+     * is never unknowingly sent as plaintext to Firestore.
+     */
+    fun getEncryptionFailurePolicy(context: Context): String =
+        getPrefs(context).getString(KEY_ENCRYPTION_FAILURE_POLICY, ENCRYPTION_POLICY_NEVER_ALLOW)
+            ?: ENCRYPTION_POLICY_NEVER_ALLOW
+
+    /**
+     * Persists the user's chosen encryption failure policy.
+     *
+     * @param policy One of [ENCRYPTION_POLICY_NEVER_ALLOW] or [ENCRYPTION_POLICY_ALWAYS_ALLOW].
+     */
+    fun setEncryptionFailurePolicy(context: Context, policy: String) {
+        getPrefs(context).edit().putString(KEY_ENCRYPTION_FAILURE_POLICY, policy).apply()
     }
 
     // ── Sync direction toggles ────────────────────────────────────────────────

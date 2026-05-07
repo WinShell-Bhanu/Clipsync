@@ -4,7 +4,7 @@
 // ClipboardManager.swift
 // Singleton that polls NSPasteboard every 300 ms for changes, encrypts and uploads
 // content to Firestore, and listens for incoming clipboard items from Android.
-// Uses AES-GCM with a shared key stored in UserDefaults.
+// Uses AES-GCM with a shared key stored in the macOS Keychain.
 
 import Foundation
 import AppKit
@@ -40,7 +40,7 @@ class ClipboardManager: ObservableObject {
     private var clipboardListener: ListenerRegistration?
 
     private var sharedSecretHex: String {
-        return UserDefaults.standard.string(forKey: "encryption_key") ?? Secrets.fallbackEncryptionKey
+        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
     }
 
     private var isListenerActive = false

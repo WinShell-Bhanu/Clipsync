@@ -33,7 +33,7 @@ class OTPNotificationManager: ObservableObject {
 
 
     private var sharedSecretHex: String {
-        return UserDefaults.standard.string(forKey: "encryption_key") ?? Secrets.fallbackEncryptionKey
+        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
     }
 
 

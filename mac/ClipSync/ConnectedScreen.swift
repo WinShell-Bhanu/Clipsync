@@ -84,6 +84,7 @@ struct ConnectedScreen: View {
         .onAppear {
             ClipboardManager.shared.startMonitoring()
             ClipboardManager.shared.listenForAndroidClipboard()
+            ImageTransferManagerMac.shared.start()
             playEntranceAnimations()
         }
         .navigationDestination(isPresented: $navigateToFinal) {

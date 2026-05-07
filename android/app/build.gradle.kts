@@ -88,6 +88,9 @@ dependencies {
     // ✅ GOOGLE PLAY SERVICES - THIS WAS MISSING!
     implementation("com.google.android.gms:play-services-base:18.3.0")
 
+    // Encrypted SharedPreferences: wraps the AES session key with hardware-backed Keystore key
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+
     // QR Code Scanning
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.camera:camera-camera2:1.4.0")

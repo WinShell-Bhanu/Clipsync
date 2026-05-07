@@ -55,9 +55,7 @@ object FCMTokenManager {
     }
 
     /**
-     * Persists the given FCM token and associated device metadata to Firestore, then
-     * subscribes the device to the `all_devices` FCM topic so broadcast messages from
-     * the Firebase Console reach every registered device simultaneously.
+     * Persists the given FCM token and associated device metadata to Firestore.
      *
      * The document is written with [SetOptions.merge] so that any extra fields stored
      * by other parts of the app are not overwritten — only the fields listed below are
@@ -100,12 +98,9 @@ object FCMTokenManager {
                 .await()
 
             Log.d(TAG, "FCM token stored in Firestore (projectId: $projectId)")
-
-            // Subscribing to "all_devices" enables sending a single FCM message from the
-            // Firebase Console that targets every device regardless of deviceId or region.
-            FirebaseMessaging.getInstance().subscribeToTopic("all_devices")
-                .addOnSuccessListener { Log.d(TAG, "Subscribed to all_devices topic") }
-                .addOnFailureListener { Log.e(TAG, "Failed to subscribe to topic", it) }
+            // Topic subscription removed: broadcasting to "all_devices" means anyone with
+            // leaked Firebase credentials could push to every ClipSync user simultaneously.
+            // Per-device FCM tokens (already stored above) are sufficient for targeted pushes.
         } catch (e: Exception) {
             Log.e(TAG, "Failed to store FCM token", e)
         }

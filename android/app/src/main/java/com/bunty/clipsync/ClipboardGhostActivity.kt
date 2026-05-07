@@ -2,6 +2,7 @@ package com.bunty.clipsync
 
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -9,6 +10,7 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import java.io.ByteArrayOutputStream
 
 /**
  * An invisible, zero-UI [Activity] that acts as a proxy for clipboard operations on Android 10+.
@@ -197,20 +199,50 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Reads the primary clip from [ClipboardManager] and forwards the text to
-     * [ClipboardAccessibilityService.onClipboardRead], which owns deduplication logic and
-     * uploads the content to Firestore for the paired Mac to consume.
+     * Reads the primary clip from [ClipboardManager] and forwards the content to the
+     * appropriate handler:
+     * - Image URIs → [ImageTransferManager.sendImageToMac] (Tier 1 local transfer)
+     * - Text → [ClipboardAccessibilityService.onClipboardRead] (Firestore upload)
      * [finishSafely] is always called in the finally block to guarantee the Activity exits.
      */
     private fun readClipboardAndFinish() {
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
-            if (!clipboard.hasPrimaryClip()) return
+            if (!clipboard.hasPrimaryClip()) {
+                Log.d(TAG, "readClipboard: no primary clip")
+                return
+            }
 
             val clipData = clipboard.primaryClip
-            if (clipData == null || clipData.itemCount == 0) return
+            if (clipData == null || clipData.itemCount == 0) {
+                Log.d(TAG, "readClipboard: clipData null or empty")
+                return
+            }
 
+            val mimeCount = clipData.description.mimeTypeCount
+            val mimes = (0 until mimeCount).joinToString(", ") { clipData.description.getMimeType(it) }
+            Log.d(TAG, "readClipboard: mimeTypes=[$mimes], itemCount=${clipData.itemCount}")
+
+            // Check for image content first.
+            if (clipData.description.hasMimeType("image/*")) {
+                val uri = clipData.getItemAt(0).uri
+                Log.d(TAG, "readClipboard: image MIME detected, uri=$uri")
+                if (uri != null) {
+                    val imageBytes = readImageBytes(uri)
+                    if (imageBytes != null && imageBytes.isNotEmpty()) {
+                        Log.d(TAG, "Image detected in clipboard (${imageBytes.size} bytes) — sending to Mac")
+                        ImageTransferManager.sendImageToMac(this, imageBytes)
+                        return
+                    } else {
+                        Log.e(TAG, "readClipboard: failed to read image bytes from $uri")
+                    }
+                } else {
+                    Log.w(TAG, "readClipboard: image MIME but uri is null")
+                }
+            }
+
+            // Fall back to text handling.
             val text = clipData.getItemAt(0).text?.toString() ?: ""
 
             if (text.isNotBlank()) {
@@ -221,6 +253,30 @@ class ClipboardGhostActivity : Activity() {
             Log.e(TAG, "Failed to read clipboard", e)
         } finally {
             finishSafely()
+        }
+    }
+
+    /**
+     * Reads image bytes from a content URI in 8 KB chunks to avoid loading the entire
+     * image into a single allocation. Returns null if the URI cannot be read.
+     *
+     * @param uri The content:// URI of the image in the clipboard.
+     * @return Raw image bytes, or null on failure.
+     */
+    private fun readImageBytes(uri: android.net.Uri): ByteArray? {
+        return try {
+            contentResolver.openInputStream(uri)?.use { input ->
+                val buffer = ByteArray(8192)
+                val output = ByteArrayOutputStream()
+                var bytesRead: Int
+                while (input.read(buffer).also { bytesRead = it } != -1) {
+                    output.write(buffer, 0, bytesRead)
+                }
+                output.toByteArray()
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read image from URI: $uri", e)
+            null
         }
     }
 

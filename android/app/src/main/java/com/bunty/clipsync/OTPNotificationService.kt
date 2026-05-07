@@ -63,7 +63,10 @@ object OTPNotificationService {
             }
 
             // Encrypt the OTP before it leaves the device; the Mac decrypts it with the shared key.
-            val encryptedOTP = encryptOTP(appContext, otpCode)
+            val encryptedOTP = encryptOTP(appContext, otpCode) ?: run {
+                Log.e(TAG, "Encryption returned null — OTP not sent")
+                return
+            }
 
             val notificationData = hashMapOf<String, Any>(
                 "type"             to "OTP_NOTIFICATION",
@@ -109,10 +112,12 @@ object OTPNotificationService {
      * @param otpCode  The plain-text OTP to encrypt.
      * @return         A Base64 (NO_WRAP) string encoding `[IV][ciphertext+GCM tag]`.
      */
-    private fun encryptOTP(context: Context, otpCode: String): String {
+    private fun encryptOTP(context: Context, otpCode: String): String? {
         return try {
+            val keyHex = DeviceManager.getEncryptionKey(context)
+                ?: throw IllegalStateException("No encryption key — device is not paired")
             val keySpec = javax.crypto.spec.SecretKeySpec(
-                hexStringToByteArray(DeviceManager.getEncryptionKey(context)), "AES"
+                hexStringToByteArray(keyHex), "AES"
             )
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
 
@@ -131,8 +136,8 @@ object OTPNotificationService {
 
             android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
-            Log.e(TAG, "OTP encryption failed - sending plaintext as fallback", e)
-            otpCode  // Last-resort fallback; the Mac will still receive a usable OTP value.
+            Log.e(TAG, "OTP encryption failed - aborting send", e)
+            return null // do NOT fall back to plaintext; return null so the caller can abort
         }
     }
 
@@ -162,4 +167,3 @@ object OTPNotificationService {
         return data
     }
 }
-

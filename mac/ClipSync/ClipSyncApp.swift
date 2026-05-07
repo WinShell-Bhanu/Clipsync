@@ -20,10 +20,13 @@ struct ClipSyncApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @ObservedObject private var pairingManager = PairingManager.shared
 
-    /// Registers default preferences, initialises Firebase, and resumes clipboard
-    /// sync/listening if a valid pairing was previously saved.
+    /// Registers default preferences, migrates secrets to Keychain, initialises Firebase,
+    /// and resumes clipboard sync/listening if a valid pairing was previously saved.
     init() {
 
+        // M1: migrate legacy UserDefaults secrets to Keychain (idempotent, safe to call every launch)
+        KeychainHelper.migrateFromUserDefaults(udKey: "encryption_key", keychainAccount: "encryption_key")
+        KeychainHelper.migrateFromUserDefaults(udKey: "current_pairing_id", keychainAccount: "current_pairing_id")
 
         UserDefaults.standard.register(defaults: [
             "syncToMac": true,
@@ -37,6 +40,7 @@ struct ClipSyncApp: App {
         if PairingManager.shared.isPaired {
              ClipboardManager.shared.startMonitoring()
              ClipboardManager.shared.listenForAndroidClipboard()
+             ImageTransferManagerMac.shared.start()
         }
     }
 
@@ -335,8 +339,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     
     // MARK: - MessagingDelegate
 
-    /// Receives the refreshed FCM token, stores it in Firestore, and subscribes
-    /// to the `all_devices` topic so the Firebase console can broadcast to all Macs.
+    /// Receives the refreshed FCM token and stores it in Firestore.
+    /// C3 fix: removed all_devices topic subscription — it's a phishing vector.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         print("✅ FCM Token received")
@@ -345,22 +349,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
         Task {
             await FCMTokenManager.shared.storeFCMToken(token: token)
         }
-        
-        // Subscribe to topic so console can target all devices at once
-        Messaging.messaging().subscribe(toTopic: "all_devices") { error in
-            if let error = error {
-                print("❌ Failed to subscribe to all_devices topic: \(error)")
-            } else {
-                print("✅ Subscribed to all_devices topic")
-            }
-        }
     }
 
     /// Hands the APNs device token to Firebase so it can map it to the FCM token.
+    /// M8 fix: no longer logs the raw APNs token hex in cleartext.
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
-        let tokenHex = deviceToken.map { String(format: "%02.2hhx", $0) }.joined()
-        print("✅ APNs token registered: \(tokenHex)")
     }
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
@@ -413,4 +407,3 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 extension Notification.Name {
     static let showUpdateDialog = Notification.Name("showUpdateDialog")
 }
-

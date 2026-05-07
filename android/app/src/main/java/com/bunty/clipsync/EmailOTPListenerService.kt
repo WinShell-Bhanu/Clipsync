@@ -6,7 +6,6 @@ import android.service.notification.StatusBarNotification
 import android.util.Log
 import android.os.Handler
 import android.os.Looper
-import android.widget.Toast
 
 /**
  * A [NotificationListenerService] that monitors email-app notifications for OTP codes and
@@ -188,15 +187,6 @@ class EmailOTPListenerService : NotificationListenerService() {
                     ClipboardGhostActivity.copyToClipboard(this, otpCode)
                     // Push the OTP to the Mac via Firestore.
                     OTPNotificationService.notifyOTPDetected(this, otpCode)
-
-                    // Toast.makeText must run on the main thread; post via mainHandler.
-                    mainHandler.post {
-                        Toast.makeText(
-                            this@EmailOTPListenerService,
-                            "Email OTP Copied: $otpCode",
-                            Toast.LENGTH_SHORT
-                        ).show()
-                    }
                 }
             }
         } catch (e: Exception) {

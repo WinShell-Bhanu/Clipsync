@@ -7,7 +7,6 @@
     objects = {
 
 /* Begin PBXBuildFile section */
-        BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */ = {isa = PBXBuildFile; fileRef = BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */; };
         BF3F450E2F4C9D9000DECBEE /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = BF3F450D2F4C9D9000DECBEE /* FirebaseMessaging */; };
         BFE62CD62F34AF70009DE3D3 /* Shimmer in Frameworks */ = {isa = PBXBuildFile; productRef = BFE62CD52F34AF70009DE3D3 /* Shimmer */; };
         BFF698172EFD43C60037416F /* Security.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BF94DD432EF29B7F0034A1B9 /* Security.framework */; };
@@ -18,7 +17,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-        BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "GoogleService-Info.plist"; sourceTree = "<group>"; };
         BF1CFB822E887C7500B7A454 /* ClipSync.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = ClipSync.app; sourceTree = BUILT_PRODUCTS_DIR; };
         BF94DD432EF29B7F0034A1B9 /* Security.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Security.framework; path = System/Library/Frameworks/Security.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
@@ -54,7 +52,6 @@
             children = (
                 BF1CFB842E887C7500B7A454 /* ClipSync */,
                 BF1CFB832E887C7500B7A454 /* Products */,
-                BF18D1962EE3266F007C36EF /* GoogleService-Info.plist */,
                 BF94DD422EF29B7F0034A1B9 /* Frameworks */,
             );
             sourceTree = "<group>";
@@ -150,7 +147,6 @@
             isa = PBXResourcesBuildPhase;
             buildActionMask = 2147483647;
             files = (
-                BF18D1972EE3266F007C36EF /* GoogleService-Info.plist in Resources */,
             );
             runOnlyForDeploymentPostprocessing = 0;
         };

@@ -63,22 +63,14 @@ object OTPNotificationService {
             }
 
             // Encrypt the OTP before it leaves the device; the Mac decrypts it with the shared key.
-            val encryptedOTP = encryptOTP(appContext, otpCode)
-
-            if (encryptedOTP == null) {
-                val policy = DeviceManager.getEncryptionFailurePolicy(appContext)
-                if (policy != DeviceManager.ENCRYPTION_POLICY_ALWAYS_ALLOW) {
-                    Log.e(TAG, "OTP encryption failed — notification skipped (policy: $policy)")
-                    return
-                }
-                Log.w(TAG, "OTP encryption failed — sending plaintext (user policy: always_allow)")
+            val encryptedOTP = encryptOTP(appContext, otpCode) ?: run {
+                Log.e(TAG, "Encryption returned null — OTP not sent")
+                return
             }
-
-            val otpToSend = encryptedOTP ?: otpCode
 
             val notificationData = hashMapOf<String, Any>(
                 "type"             to "OTP_NOTIFICATION",
-                "encryptedOTP"     to otpToSend,
+                "encryptedOTP"     to encryptedOTP,
                 "pairingId"        to pairingId,
                 "sourceDeviceId"   to deviceId,
                 "sourceDeviceName" to deviceName,
@@ -113,18 +105,19 @@ object OTPNotificationService {
      * without requiring a separate transmission channel.
      *
      * If encryption fails for any reason (e.g. a malformed stored key), the method logs the
-     * error and returns `null` so the caller can skip the sync rather than sending the OTP
-     * as plaintext to Firestore.
+     * error and returns the plain-text OTP as a last resort so the user is not silently blocked
+     * from receiving their code. This fallback path should never be reached in production.
      *
      * @param context  Application context used to retrieve the AES session key via [DeviceManager].
      * @param otpCode  The plain-text OTP to encrypt.
-     * @return         A Base64 (NO_WRAP) string encoding `[IV][ciphertext+GCM tag]`, or `null`
-     *                 if encryption failed.
+     * @return         A Base64 (NO_WRAP) string encoding `[IV][ciphertext+GCM tag]`.
      */
     private fun encryptOTP(context: Context, otpCode: String): String? {
         return try {
+            val keyHex = DeviceManager.getEncryptionKey(context)
+                ?: throw IllegalStateException("No encryption key — device is not paired")
             val keySpec = javax.crypto.spec.SecretKeySpec(
-                hexStringToByteArray(DeviceManager.getEncryptionKey(context)), "AES"
+                hexStringToByteArray(keyHex), "AES"
             )
             val cipher = javax.crypto.Cipher.getInstance("AES/GCM/NoPadding")
 
@@ -143,8 +136,8 @@ object OTPNotificationService {
 
             android.util.Base64.encodeToString(combined, android.util.Base64.NO_WRAP)
         } catch (e: Exception) {
-            Log.e(TAG, "OTP encryption failed — sync will be skipped", e)
-            null
+            Log.e(TAG, "OTP encryption failed - aborting send", e)
+            return null // do NOT fall back to plaintext; return null so the caller can abort
         }
     }
 
@@ -174,4 +167,3 @@ object OTPNotificationService {
         return data
     }
 }
-

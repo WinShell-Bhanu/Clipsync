@@ -111,9 +111,9 @@ fun ConnectionPage(
         isPlayingLottie = true // begin the Lottie sync loop after the subtitle appears
 
         // Register the FCM token in the background so push notifications work immediately.
-        // Intentionally deferred until after a confirmed pairing to avoid registering tokens
-        // for devices that never completed setup.
-        kotlinx.coroutines.GlobalScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+        // M7 fix: use the composable's coroutineScope (tied to the screen lifecycle)
+        // instead of GlobalScope to avoid leaking the coroutine if the user navigates away.
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
             FCMTokenManager.registerFCMToken(context)
         }
     }

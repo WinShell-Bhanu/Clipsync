@@ -118,6 +118,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
     var showItem2 by remember { mutableStateOf(false) }  // Accessibility row
     var showItem3 by remember { mutableStateOf(false) }  // Display Over Apps row
     var showItem4 by remember { mutableStateOf(false) }  // SMS Access row
+    var showItem5 by remember { mutableStateOf(false) }  // Photo Access row
     var showButton by remember { mutableStateOf(false) }
 
     // Stagger each element 100–150 ms apart so the eye is guided naturally downward
@@ -135,6 +136,8 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         showItem3 = true
         delay(100)
         showItem4 = true
+        delay(100)
+        showItem5 = true
         delay(150)
         showButton = true
     }
@@ -158,6 +161,23 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         onResult = { isGranted ->
             notificationGranted = isGranted
         }
+    )
+
+    // Media images permission (API 33+ = READ_MEDIA_IMAGES, older = READ_EXTERNAL_STORAGE)
+    // Needed for ScreenshotObserver to read screenshot bytes from MediaStore.
+    var mediaImagesGranted by remember {
+        mutableStateOf(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
+            }
+        )
+    }
+
+    val mediaLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission(),
+        onResult = { isGranted -> mediaImagesGranted = isGranted }
     )
 
     // Multi-permission launcher that requests READ_SMS and RECEIVE_SMS together in a
@@ -188,6 +208,12 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
 
             if (Build.VERSION.SDK_INT >= 33) {
                 notificationGranted = ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+            }
+
+            mediaImagesGranted = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
+            } else {
+                ContextCompat.checkSelfPermission(context, Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
             }
 
             // Fire a confirmation toast exactly once when accessibility transitions
@@ -237,7 +263,7 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
         ) {
             Box(
                 modifier = Modifier
-                    .size(width = (390 * scale).dp, height = (467 * scale).dp)
+                    .size(width = (390 * scale).dp, height = (570 * scale).dp)
                     .background(
                         brush = Brush.verticalGradient(
                             colors = listOf(
@@ -362,6 +388,34 @@ fun PermissionPage(onFinishSetup: () -> Unit = {}) {
                         scale = scale
                      )
                  }
+
+                // Row 5 – Photo Access: required for automatic screenshot detection.
+                // Uses READ_MEDIA_IMAGES (API 33+) or READ_EXTERNAL_STORAGE (API 31-32).
+                // Without this permission, ScreenshotObserver can detect new files but
+                // cannot read their bytes, so Android→Mac screenshot sync is disabled.
+                AnimatedVisibility(
+                    visible = showItem5,
+                    enter = fadeIn(tween(300)) + slideInHorizontally(initialOffsetX = { -40 }, animationSpec = tween(300)),
+                    modifier = Modifier.offset(x = (20 * scale).dp, y = (463 * scale).dp)
+                ) {
+                    PermissionItem(
+                        iconRes = R.drawable.batteryshield,
+                        title = "Photo Access",
+                        description = "Detect screenshots for auto-sync to Mac.",
+                        isChecked = mediaImagesGranted,
+                        onToggle = {
+                            if (!mediaImagesGranted) {
+                                val perm = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                                    Manifest.permission.READ_MEDIA_IMAGES
+                                else
+                                    Manifest.permission.READ_EXTERNAL_STORAGE
+                                mediaLauncher.launch(perm)
+                            }
+                        },
+                        fontFamily = robotoFontFamily,
+                        scale = scale
+                    )
+                }
             }
         }
 

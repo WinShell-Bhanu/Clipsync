@@ -114,6 +114,9 @@ class PairingManager: ObservableObject {
             self.pairedDeviceName = androidDeviceName
             self.isPaired = true
             self.pairingError = nil
+            
+            ClipboardManager.shared.listenForAndroidClipboard()
+            ImageTransferManagerMac.shared.start()
         }
 
         UserDefaults.standard.set(pairingId, forKey: "current_pairing_id")
@@ -203,48 +206,44 @@ class PairingManager: ObservableObject {
         ClipboardManager.shared.clearHistory()
         ClipboardManager.shared.stopMonitoring()
         ClipboardManager.shared.stopListening()
+        ImageTransferManagerMac.shared.stop()
     }
 
 
     // MARK: - Launch Restoration
 
-    /// On launch, checks if the saved pairing belongs to the current boot session
-    /// (within 120 s tolerance); if not, unpairs to avoid stale state.
+    /// U1 fix: On launch, restores the saved pairing and validates it against Firestore.
+    /// No longer compares boot times — a reboot should NOT unpair the user.
     func restorePairing() {
         if let savedPairingId = UserDefaults.standard.string(forKey: "current_pairing_id"),
            let savedDeviceName = UserDefaults.standard.string(forKey: "paired_device_name") {
 
-            let currentBootTime = getCurrentBootTime()
-            let savedBootTime = UserDefaults.standard.double(forKey: "last_boot_time")
-
-            if abs(currentBootTime - savedBootTime) > 120 {
-                unpair()
-                return
-            }
-
             self.pairingId = savedPairingId
             self.pairedDeviceName = savedDeviceName
             self.isPaired = true
-
-            self.startMonitoringPairingStatus(pairingId: savedPairingId)
             self.isSetupComplete = UserDefaults.standard.bool(forKey: "is_setup_complete")
+
+            // Validate the pairing still exists in Firestore; if the Android side
+            // deleted it while the Mac was turned off, unpair gracefully.
+            db.collection("pairings").document(savedPairingId).getDocument { [weak self] snapshot, error in
+                guard let self = self else { return }
+                if let snapshot = snapshot, snapshot.exists {
+                    // Pairing is valid — start monitoring for remote unpairs
+                    self.startMonitoringPairingStatus(pairingId: savedPairingId)
+                } else {
+                    // Pairing document was deleted remotely → clean up local state
+                    self.unpair()
+                }
+            }
         }
     }
 
 
-    /// Marks onboarding as done and persists the current boot time so restorePairing
-    /// can verify session validity on the next launch.
+    /// Marks onboarding as done.
     func completeSetup() {
         DispatchQueue.main.async {
             self.isSetupComplete = true
         }
         UserDefaults.standard.set(true, forKey: "is_setup_complete")
-        UserDefaults.standard.set(getCurrentBootTime(), forKey: "last_boot_time")
-    }
-
-
-    /// Derives the wall-clock boot time by subtracting system uptime from the current date.
-    private func getCurrentBootTime() -> TimeInterval {
-        return Date().timeIntervalSince1970 - ProcessInfo.processInfo.systemUptime
     }
 }

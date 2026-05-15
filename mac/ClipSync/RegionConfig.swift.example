@@ -1,0 +1,34 @@
+import Foundation
+import FirebaseCore
+
+struct RegionConfig {
+    static let REGION_INDIA = "IN"
+    static let REGION_US = "US"
+    
+    // US Project Credentials
+    // Derived from your GoogleService-Info.plist
+    struct US {
+        static let projectID = "YOUR_PROJECT_ID"
+        static let googleAppID = "YOUR_GOOGLE_APP_ID" 
+        static let gcmSenderID = "YOUR_GCM_SENDER_ID"
+        static let storageBucket = "YOUR_STORAGE_BUCKET"
+        static let apiKey = "YOUR_API_KEY" 
+    }
+    
+    static func getOptions(for region: String) -> FirebaseOptions? {
+        if region == REGION_US {
+            let options = FirebaseOptions(googleAppID: US.googleAppID, gcmSenderID: US.gcmSenderID)
+            options.apiKey = US.apiKey
+            options.projectID = US.projectID
+            options.storageBucket = US.storageBucket
+            return options
+        }
+        
+      
+        return nil
+    }
+}
+
+struct Secrets {
+    static let fallbackEncryptionKey = "YOUR_FALLBACK_KEY_32_BYTES_HEX"
+}

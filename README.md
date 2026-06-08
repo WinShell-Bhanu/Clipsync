@@ -78,6 +78,51 @@ ClipSync uses an Accessibility Service to detect copy events. On **Android 13+**
 
 ---
 
+## 🔧 Self-Hosting (Bring Your Own Firebase)
+
+ClipSync has no custom server — both apps relay through **Firebase Firestore**. You can point the apps at **your own Firebase project** for full control over your backend, access rules, and data residency. This is also required to build the apps from source.
+
+#### 1. Create a Firebase project
+In the [Firebase Console](https://console.firebase.google.com/), create a project and enable:
+- **Cloud Firestore**
+- **Authentication** → **Anonymous** sign-in provider
+- **Cloud Messaging** (for OTP/notification relay)
+
+#### 2. Add your Firebase config files
+These files are git-ignored, so each contributor supplies their own:
+- **Android:** download `google-services.json` → place in `android/app/`
+- **macOS:** download `GoogleService-Info.plist` → add to the `mac/ClipSync/` target
+
+#### 3. Fill in the config templates
+The repo ships `.example` templates. Copy each one (dropping the `.example` suffix) and fill in your values:
+
+```bash
+# Android
+cp android/app/src/main/java/com/bunty/clipsync/RegionConfig.kt.example \
+   android/app/src/main/java/com/bunty/clipsync/RegionConfig.kt
+cp android/app/src/main/java/com/bunty/clipsync/Secrets.kt.example \
+   android/app/src/main/java/com/bunty/clipsync/Secrets.kt
+
+# macOS
+cp mac/ClipSync/RegionConfig.swift.example mac/ClipSync/RegionConfig.swift
+```
+
+#### 4. Deploy the Firestore security rules
+A reference copy of the rules lives at [`firestore.rules.example`](firestore.rules.example). Copy and deploy it:
+
+```bash
+cp firestore.rules.example firestore.rules
+firebase deploy --only firestore:rules
+```
+
+### 🔒 Security note
+
+The Firestore rules are now **published and auditable** in [`firestore.rules.example`](firestore.rules.example). They require every request to carry a valid Firebase Auth token (anonymous auth is enough) and deny everything by default.
+
+> **Heads up:** the reference rules require authentication. The Android client already signs in anonymously on launch, but the macOS client does not yet authenticate. Deploy the auth-required rules only after the Mac client has been updated to sign in anonymously, otherwise the Mac app will lose Firestore access. See the comments in `firestore.rules.example` for details and planned per-pairing hardening.
+
+---
+
 ## 🤝 Contributing
 
 We love contributions!

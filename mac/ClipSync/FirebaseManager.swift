@@ -50,6 +50,11 @@ class FirebaseManager {
         return FirebaseApp.app() != nil
     }
 
+    // TODO: This is a stub — the Mac client does not yet sign in to Firebase Auth.
+    // The Android client authenticates anonymously on launch (see ClipSyncApp.kt ->
+    // signInAnonymously()), but no FirebaseAuth sign-in exists here. To enforce
+    // auth-required Firestore rules (see firestore.rules.example), link FirebaseAuth
+    // in the Xcode project, sign in anonymously, and return the real auth state here.
     var isAuthenticated: Bool {
         return true
     }

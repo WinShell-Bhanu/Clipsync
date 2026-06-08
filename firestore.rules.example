@@ -1,0 +1,78 @@
+// ClipSync — Reference Firestore Security Rules
+// ----------------------------------------------------------------------------
+// This is a REFERENCE copy of the access-control rules for the Firestore
+// collections ClipSync uses. It is published so contributors and self-hosters
+// can audit exactly how data access is controlled.
+//
+// Usage (self-hosting / bring-your-own-Firebase):
+//   1. Copy this file to `firestore.rules`:
+//        cp firestore.rules.example firestore.rules
+//   2. Deploy it to your own Firebase project:
+//        firebase deploy --only firestore:rules
+//
+// ----------------------------------------------------------------------------
+// IMPORTANT CAVEAT — read before deploying
+// ----------------------------------------------------------------------------
+// These rules require every request to carry a valid Firebase Auth token
+// (anonymous auth is sufficient). The Android client already signs in
+// anonymously on launch (see ClipSyncApp.kt -> signInAnonymously()).
+//
+// The macOS client does NOT yet authenticate — `FirebaseManager.isAuthenticated`
+// is currently a stub that returns `true`, and FirebaseAuth is not linked in the
+// Xcode project. If you deploy these auth-required rules while the Mac client is
+// still unauthenticated, the Mac app will lose all Firestore access (reads and
+// writes will be denied).
+//
+// Deploy these rules only AFTER the Mac client has been updated to sign in
+// anonymously (matching Android). Until then, the hosted backend has to allow
+// unauthenticated access, which is the underlying security limitation this file
+// is meant to help close.
+//
+// ----------------------------------------------------------------------------
+// FUTURE HARDENING (not implemented here)
+// ----------------------------------------------------------------------------
+// Anonymous auth alone proves "some app instance is signed in" — it does NOT
+// scope a user to their own pairing. With these rules, any signed-in client that
+// knows a `pairingId` could still read that pair's (encrypted) documents.
+//
+// True per-pairing isolation requires:
+//   - Recording both devices' auth UIDs on the pairing document at pair time
+//     (e.g. an `authorizedUids` array).
+//   - Stamping each clipboardItems / notifications document with its `pairingId`
+//     and validating the caller against the pairing's `authorizedUids`, e.g.:
+//         allow read, write: if request.auth.uid in
+//           get(/databases/$(database)/documents/pairings/$(resource.data.pairingId)).data.authorizedUids;
+// This is intentionally out of scope for this reference file.
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Returns true when the request carries a valid Firebase Auth token.
+    // Anonymous auth satisfies this check.
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Device pairing records (Mac <-> Android link metadata).
+    match /pairings/{pairingId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Encrypted clipboard payloads relayed between paired devices.
+    match /clipboardItems/{itemId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Short-lived OTP / notification relay documents.
+    match /notifications/{notificationId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Default deny: anything not explicitly matched above is rejected.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

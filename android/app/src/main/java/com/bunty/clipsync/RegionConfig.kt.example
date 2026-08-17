@@ -1,0 +1,34 @@
+package com.bunty.clipsync
+
+import android.content.Context
+import com.google.firebase.FirebaseOptions
+
+object RegionConfig {
+
+    const val REGION_INDIA = "IN"
+    const val REGION_US = "US"
+
+    // --- Environment Credentials ---
+    // US Project Credentials
+    private const val US_PROJECT_ID = "YOUR_PROJECT_ID" 
+    private const val US_APPLICATION_ID = "YOUR_APPLICATION_ID"
+    private const val US_API_KEY = "YOUR_API_KEY"
+
+    fun getOptionsForRegion(context: Context, region: String): FirebaseOptions? {
+        return when (region) {
+            REGION_US -> {
+                FirebaseOptions.Builder()
+                    .setProjectId(US_PROJECT_ID)
+                    .setApplicationId(US_APPLICATION_ID)
+                    .setApiKey(US_API_KEY)
+                    .setStorageBucket("YOUR_STORAGE_BUCKET")
+                    .build()
+            }
+            REGION_INDIA -> {
+                // Return null to indicate "Use Default from google-services.json"
+                null
+            }
+            else -> null // Default
+        }
+    }
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+   Backup rules for API 30 and below.
+   Excludes sensitive data from ADB and cloud backups.
+   See https://developer.android.com/guide/topics/data/autobackup
+-->
+<full-backup-content>
+    <!-- Exclude the entire app SharedPreferences file: it contains the AES encryption key
+         and pairing state, which must never leave the device via a backup channel. -->
+    <exclude domain="sharedpref" path="clipsync_prefs.xml"/>
+    <exclude domain="sharedpref" path="clipsync_prefs_secure.xml"/>
+</full-backup-content>

@@ -70,7 +70,9 @@ class ShareViewController: NSViewController {
                 return
             }
             self.enqueue(bookmarks: bookmarks)
-            self.launchMainApp()
+            // Removed launchMainApp() to bypass the macOS "access data from other apps" prompt.
+            // Since ClipSync is a menu bar app, it will already be running and the Darwin
+            // notification sent by enqueue() will wake it up instantly to process the files.
             self.extensionContext?.completeRequest(returningItems: nil, completionHandler: nil)
         }
     }
@@ -97,29 +99,7 @@ class ShareViewController: NSViewController {
         )
     }
 
-    /// Opens the main ClipSync app via NSWorkspace. Works whether the app is
-    /// running (brings it to front) or not (cold-launches it).
-    private func launchMainApp() {
-        let workspace = NSWorkspace.shared
-        // Prefer running instance first
-        if let app = NSRunningApplication.runningApplications(withBundleIdentifier: mainAppBundleID).first {
-            app.activate(options: [])
-            return
-        }
-        // Cold-launch via bundle ID
-        if #available(macOS 10.15, *) {
-            let config = NSWorkspace.OpenConfiguration()
-            config.activates = true
-            if let url = workspace.urlForApplication(withBundleIdentifier: mainAppBundleID) {
-                workspace.openApplication(at: url, configuration: config, completionHandler: nil)
-            }
-        } else {
-            workspace.launchApplication(withBundleIdentifier: mainAppBundleID,
-                                        options: [],
-                                        additionalEventParamDescriptor: nil,
-                                        launchIdentifier: nil)
-        }
-    }
+
 
     private func cancel(reason: String) {
         extensionContext?.cancelRequest(withError: NSError(

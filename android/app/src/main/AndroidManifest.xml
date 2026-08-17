@@ -5,7 +5,10 @@
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE"/>
     <uses-permission android:name="android.permission.CHANGE_WIFI_MULTICAST_STATE"/>
+    <!-- Android 13+: required for NSD discovery and LocalOnlyHotspot -->
+    <uses-permission android:name="android.permission.NEARBY_WIFI_DEVICES" />
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
     <uses-permission android:name="android.permission.CAMERA"/>
     <uses-feature android:name="android.hardware.camera" android:required="false" />
@@ -13,13 +16,35 @@
 
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    
+    <!-- Required to prompt user to install downloaded APK updates -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
+
+    <!-- Bluetooth LE Permissions (API 31+) -->
+    <!-- Scan for BLE devices (finding the Mac's ClipSync UUID) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:usesPermissionFlags="neverForLocation" />
+
+    <!-- Connect/communicate with paired device -->
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+
+    <!-- Advertise BLE (if Android ever needs to advertise) -->
+    <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+    
+    <!-- Legacy Bluetooth Permissions (API 30 and below) -->
+    <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
 
     <!-- Media image access for screenshot detection (Android 13+).
          On Android 12 (API 31–32) READ_EXTERNAL_STORAGE is used instead. -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
 
-    <!-- SMS Permissions for OTP Detection -->
+    <!-- SMS Permissions for OTP Detection via raw SMS broadcast -->
+    <!-- Required because Android 9+ SMS apps redact OTP content from notification extras -->
     <uses-permission android:name="android.permission.RECEIVE_SMS"/>
     <uses-permission android:name="android.permission.READ_SMS"/>
 
@@ -42,12 +67,39 @@
         <activity
             android:name=".MainActivity"
             android:exported="true"
+            android:launchMode="singleTop"
             android:theme="@style/Theme.ClipSync">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Share Activity for Background File Sharing -->
+        <activity
+            android:name=".ShareActivity"
+            android:theme="@style/Theme.Transparent.NoAnimation"
+            android:exported="true">
+            <!-- Share Target Intent Filter -->
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.intent.action.SEND_MULTIPLE" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="image/*" />
+                <data android:mimeType="*/*" />
+            </intent-filter>
+        </activity>
+
+        <service 
+            android:name=".ShareTransferService" 
+            android:foregroundServiceType="connectedDevice" 
+            android:exported="false" />
 
         <!-- Ghost Activity for Background Clipboard Access -->
         <!-- taskAffinity="" isolates this in its own task so it never brings MainActivity to front -->
@@ -57,6 +109,8 @@
             android:excludeFromRecents="true"
             android:launchMode="singleTop"
             android:taskAffinity=""
+            android:showWhenLocked="true"
+            android:turnScreenOn="false"
             android:windowSoftInputMode="stateUnchanged"
             android:exported="false" />
 
@@ -73,6 +127,11 @@
                 android:resource="@xml/accessibility_service_config"/>
         </service>
 
+        <service
+            android:name=".MacPushForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice" />
+
 
         <!-- Firebase Messaging Service -->
         <service
@@ -83,7 +142,9 @@
             </intent-filter>
         </service>
 
-        <!-- OTP SMS Receiver -->
+
+
+        <!-- OTP SMS Receiver: intercepts raw SMS_RECEIVED before SMS apps can redact notification content -->
         <receiver
             android:name=".OTPListeningService"
             android:permission="android.permission.BROADCAST_SMS"
@@ -103,6 +164,26 @@
             </intent-filter>
         </service>
 
+        <!-- Cancel Transfer Receiver -->
+        <receiver
+            android:name=".CancelTransferReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.bunty.clipsync.ACTION_CANCEL_RECEIVE" />
+                <action android:name="com.bunty.clipsync.ACTION_CANCEL_SEND" />
+            </intent-filter>
+        </receiver>
+
+        <!-- FileProvider for APK Installation -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/filepaths" />
+        </provider>
 
     </application>
 

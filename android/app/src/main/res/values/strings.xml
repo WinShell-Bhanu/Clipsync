@@ -2,4 +2,62 @@
 <resources>
     <string name="app_name">ClipSync</string>
     <string name="accessibility_service_description">ClipSync needs this to detect copied text and sync it with your Mac. No data is collected.</string>
+    <string-array name="copy_words">
+        <item>copy</item>
+        <item>कॉपी</item>
+        <item>नकल करें</item>
+        <item>कॉपी करें</item>
+        <item>কপি</item>
+        <item>কপি করুন</item>
+        <item>కాపీ</item>
+        <item>కాపీ చేయి</item>
+        <item>कॉपी करा</item>
+        <item>நகலெடு</item>
+        <item>நகல்</item>
+        <item>નકલ કરો</item>
+        <item>કૉપિ</item>
+        <item>ನಕಲು</item>
+        <item>ನಕಲಿಸಿ</item>
+        <item>പകർത്തുക</item>
+        <item>കോപ്പി</item>
+        <item>ਕਾਪੀ ਕਰੋ</item>
+        <item>ਕਾਪੀ</item>
+        <item>କପି</item>
+        <item>copier</item>
+        <item>kopieren</item>
+        <item>copiar</item>
+        <item>نسخ</item>
+        <item>kopyala</item>
+        <item>salin</item>
+        <item>копировать</item>
+        <item>скопировать</item>
+        <item>コピー</item>
+        <item>복사</item>
+        <item>复制</item>
+        <item>複製</item>
+    </string-array>
+    <string-array name="copied_words">
+        <item>copied</item>
+        <item>कॉपी किया</item>
+        <item>কপি করা হয়েছে</item>
+        <item>కాపీ చేయబడింది</item>
+        <item>कॉपी केले</item>
+        <item>நகலெடுக்கப்பட்டது</item>
+        <item>નકલ કરી</item>
+        <item>ನಕಲಿಸಲಾಗಿದೆ</item>
+        <item>പകർത്തി</item>
+        <item>ਕਾਪੀ ਕੀਤਾ</item>
+        <item>copié</item>
+        <item>kopiert</item>
+        <item>copiado</item>
+        <item>تم النسخ</item>
+        <item>kopyalandı</item>
+        <item>disalin</item>
+        <item>скопировано</item>
+        <item>コピーしました</item>
+        <item>コピー済み</item>
+        <item>복사됨</item>
+        <item>已复制</item>
+        <item>已複製</item>
+    </string-array>
 </resources>

@@ -2,7 +2,6 @@ package com.bunty.clipsync
 
 import android.app.Activity
 import android.content.ClipData
-import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
@@ -10,7 +9,12 @@ import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
-import java.io.ByteArrayOutputStream
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 /**
  * An invisible, zero-UI [Activity] that acts as a proxy for clipboard operations on Android 10+.
@@ -43,6 +47,9 @@ class ClipboardGhostActivity : Activity() {
     private var hasFinished = false
     // All posts to this handler run on the main thread; used exclusively for the safety timeout.
     private val safetyHandler = Handler(Looper.getMainLooper())
+    private val scope = kotlinx.coroutines.CoroutineScope(
+        kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Main
+    )
 
     /**
      * Dead-man's-switch runnable posted via [safetyHandler] at creation time. If [finishSafely]
@@ -68,6 +75,13 @@ class ClipboardGhostActivity : Activity() {
         /** Intent extra key carrying the plain-text string to write to the clipboard. */
         const val EXTRA_CLIP_TEXT = "extra_clip_text"
 
+        /**
+         * Intent extra key carrying the absolute path of a staged image file.
+         * Used when the payload is a `[IMAGE_PAYLOAD]:` string that exceeds Android's
+         * ~1MB Binder IPC limit and cannot be passed directly in an Intent extra.
+         */
+        const val EXTRA_IMAGE_FILE_PATH = "extra_image_file_path"
+
         /** Intent action requesting a clipboard read; the actual read is deferred to [onResume]. */
         const val ACTION_READ  = "action_read"
 
@@ -77,14 +91,12 @@ class ClipboardGhostActivity : Activity() {
         /**
          * Convenience factory that starts a ghost Activity to write [text] to the clipboard.
          *
-         * The Intent is built with [FLAG_ACTIVITY_NO_ANIMATION] (invisible launch),
-         * [FLAG_ACTIVITY_SINGLE_TOP] (reuse an existing instance if already on the stack), and
-         * [FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS] (keep it off the recent-apps screen).
-         * Any failure to start the Activity is caught and logged so the caller does not need
-         * exception handling.
+         * For large [IMAGE_PAYLOAD] strings the bytes are staged to a temp file first so that
+         * the path (not the ~multi-MB payload) travels through the Binder IPC. This avoids the
+         * hard ~1MB Binder transaction limit that causes a silent TransactionTooLargeException.
          *
          * @param context Any valid [Context] from which the Activity can be started.
-         * @param text    Plain-text string to place on the system clipboard.
+         * @param text    Plain-text string or `[IMAGE_PAYLOAD]:base64` image payload.
          */
         fun copyToClipboard(context: Context, text: String) {
             runCatching {
@@ -94,7 +106,20 @@ class ClipboardGhostActivity : Activity() {
                             Intent.FLAG_ACTIVITY_SINGLE_TOP or
                             Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
                     action = ACTION_WRITE
-                    putExtra(EXTRA_CLIP_TEXT, text)
+
+                    if (text.startsWith("[IMAGE_PAYLOAD]:")) {
+                        // Stage bytes to disk; pass only the file path in the Intent to avoid
+                        // the ~1MB Binder transaction limit (TransactionTooLargeException).
+                        val base64 = text.removePrefix("[IMAGE_PAYLOAD]:")
+                        val imageBytes = android.util.Base64.decode(base64, android.util.Base64.DEFAULT)
+                        val stageDir = java.io.File(context.cacheDir, "clipboard_images")
+                        if (!stageDir.exists()) stageDir.mkdirs()
+                        val stageFile = java.io.File(stageDir, "staged_image_${System.currentTimeMillis()}.jpg")
+                        stageFile.writeBytes(imageBytes)
+                        putExtra(EXTRA_IMAGE_FILE_PATH, stageFile.absolutePath)
+                    } else {
+                        putExtra(EXTRA_CLIP_TEXT, text)
+                    }
                 }
                 context.startActivity(intent)
             }.onFailure { error ->
@@ -126,6 +151,30 @@ class ClipboardGhostActivity : Activity() {
                 Log.e(TAG, "Unable to launch ghost activity for clipboard read", error)
             }
         }
+
+        fun copyImageFileToClipboard(context: Context, filePath: String) {
+            runCatching {
+                val intent = Intent(context, ClipboardGhostActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_NO_ANIMATION or
+                            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                            Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
+                    action = ACTION_WRITE
+                    putExtra(EXTRA_IMAGE_FILE_PATH, filePath)
+                }
+                context.startActivity(intent)
+            }.onFailure { error ->
+                Log.e(TAG, "Unable to launch ghost activity for image write", error)
+            }
+        }
+
+        fun cleanupOldStagedImages(context: Context, maxAgeMs: Long = 60 * 60 * 1000L) {
+            val stageDir = java.io.File(context.cacheDir, "clipboard_images")
+            val cutoff = System.currentTimeMillis() - maxAgeMs
+            stageDir.listFiles()?.forEach { file ->
+                if (file.lastModified() < cutoff) file.delete()
+            }
+        }
     }
 
     /**
@@ -134,6 +183,16 @@ class ClipboardGhostActivity : Activity() {
      * For write operations, the work is done and the Activity finishes before [onResume].
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        // ── Prevent keyboard flicker ──────────────────────────────────────────
+        // FLAG_ALT_FOCUSABLE_IM: this window can acquire focus without the IMM
+        // interpreting it as a reason to hide the soft keyboard. Without this flag,
+        // the IMM sees a non-input-field window claiming focus and immediately hides
+        // the keyboard, then shows it again when we finish — causing the visible flicker.
+        // SOFT_INPUT_STATE_UNCHANGED: belt-and-suspenders lock so the IME state
+        // is completely frozen for the lifetime of this window.
+        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM)
+        window.setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_STATE_UNCHANGED)
+
         super.onCreate(savedInstanceState)
         disableOpenAnimation()
 
@@ -162,10 +221,34 @@ class ClipboardGhostActivity : Activity() {
      */
     override fun onResume() {
         super.onResume()
-        if (intent.action == ACTION_READ && !hasReadClipboard && !hasFinished) {
-            hasReadClipboard = true
-            window.decorView.post {
-                readClipboardAndFinish()
+        // Actual read happens in onWindowFocusChanged to guarantee focus + allow
+        // the source app time to finish writing image data to the clipboard.
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && !hasFinished) {
+            when (intent.action) {
+                ACTION_READ -> {
+                    if (!hasReadClipboard) {
+                        hasReadClipboard = true
+                        // Delay 200ms to allow the source app (e.g. Gallery) to finish
+                        // committing image data to the clipboard before we read it.
+                        scope.launch {
+                            delay(200)
+                            readClipboardAndFinish()
+                        }
+                    }
+                }
+                ACTION_WRITE -> {
+                    val imageFilePath = intent.getStringExtra(EXTRA_IMAGE_FILE_PATH)
+                    val text = intent.getStringExtra(EXTRA_CLIP_TEXT)
+                    when {
+                        imageFilePath != null -> writeImageFileToClipboard(imageFilePath)
+                        !text.isNullOrEmpty() -> copyTextToClipboard(text)
+                    }
+                    finishSafely()
+                }
             }
         }
     }
@@ -173,22 +256,18 @@ class ClipboardGhostActivity : Activity() {
     /**
      * Routes the incoming intent to the appropriate clipboard operation:
      *
-     * - [ACTION_WRITE]: Extracts [EXTRA_CLIP_TEXT], writes it to the clipboard, finishes.
-     * - [ACTION_READ]:  Resets [hasReadClipboard] so the deferred read runs in [onResume].
+     * - [ACTION_WRITE]: Does nothing here, defers to [onWindowFocusChanged] where we have focus.
+     * - [ACTION_READ]:  Resets [hasReadClipboard] so the deferred read runs in [onWindowFocusChanged].
      * - Unknown action: Finishes immediately without touching the clipboard.
      */
     private fun handleIntent(incomingIntent: Intent?) {
         when (incomingIntent?.action) {
             ACTION_WRITE -> {
-                val text = incomingIntent.getStringExtra(EXTRA_CLIP_TEXT)
-                if (!text.isNullOrEmpty()) {
-                    copyTextToClipboard(text)
-                }
-                finishSafely()
+                // Focus is required in Android 10+ for clipboard writes. Defers to onWindowFocusChanged.
             }
 
             ACTION_READ -> {
-                // Reset the guard flag so onResume() triggers the deferred clipboard read.
+                // Reset the guard flag so onWindowFocusChanged() triggers the deferred clipboard read.
                 hasReadClipboard = false
             }
 
@@ -199,9 +278,9 @@ class ClipboardGhostActivity : Activity() {
     }
 
     /**
-     * Reads the primary clip from [ClipboardManager] and forwards the content to the
-     * appropriate handler:
-     * - Text → [ClipboardAccessibilityService.onClipboardRead] (Firestore upload)
+     * Reads the primary clip from [ClipboardManager] and forwards the text to
+     * [ClipboardAccessibilityService.onClipboardRead], which owns deduplication logic and
+     * uploads the content to Firestore for the paired Mac to consume.
      * [finishSafely] is always called in the finally block to guarantee the Activity exits.
      */
     private fun readClipboardAndFinish() {
@@ -209,40 +288,53 @@ class ClipboardGhostActivity : Activity() {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
 
             if (!clipboard.hasPrimaryClip()) {
-                Log.d(TAG, "readClipboard: no primary clip")
                 return
             }
 
             val clipData = clipboard.primaryClip
             if (clipData == null || clipData.itemCount == 0) {
-                Log.d(TAG, "readClipboard: clipData null or empty")
                 return
             }
 
-            val mimeCount = clipData.description.mimeTypeCount
-            val mimes = (0 until mimeCount).joinToString(", ") { clipData.description.getMimeType(it) }
-            Log.d(TAG, "readClipboard: mimeTypes=[$mimes], itemCount=${clipData.itemCount}")
+            val item = clipData.getItemAt(0)
+            val text = item.text?.toString() ?: ""
+            val uri = item.uri
+            val isImage = clipData.description.hasMimeType("image/*")
 
-            // Check for image content first.
-            if (clipData.description.hasMimeType("image/*")) {
-                val uri = clipData.getItemAt(0).uri
-                if (uri != null) {
-                    val bytes = readImageBytes(uri)
-                    if (bytes != null) {
-                        Log.d(TAG, "readClipboard: read ${bytes.size} bytes of image data, but ImageTransferManager is missing.")
-                        return
-                    } else {
-                        Log.e(TAG, "readClipboard: failed to read image bytes from $uri")
-                    }
-                } else {
-                    Log.w(TAG, "readClipboard: image MIME but uri is null")
-                }
+            // Ignore files (e.g. copied from a file manager) that are not images
+            if (uri != null && !isImage) {
+                return
             }
 
-            // Fall back to text handling.
-            val text = clipData.getItemAt(0).text?.toString() ?: ""
-
-            if (text.isNotBlank()) {
+            if (isImage && uri != null) {
+                // Read the image bytes NOW while we still hold clipboard focus + a valid
+                // URI grant. If we pass the URI to LocalSyncManager and wait for BLE
+                // IP resolution (up to 8 s), the URI may expire and the stream open fails.
+                try {
+                    val extension = contentResolver.getType(uri)
+                        ?.substringAfterLast('/')?.substringBefore(';') ?: "png"
+                    val tmpFile = java.io.File(
+                        cacheDir,
+                        "clip_img_${System.currentTimeMillis()}.$extension"
+                    )
+                    contentResolver.openInputStream(uri)?.use { input ->
+                        tmpFile.outputStream().use { output -> input.copyTo(output) }
+                    }
+                    if (tmpFile.length() > 0) {
+                        LocalSyncManager.onClipboardContent(
+                            context = this,
+                            content = "",
+                            contentType = "image",
+                            file = tmpFile
+                        )
+                    } else {
+                        tmpFile.delete()
+                        Log.w(TAG, "Image temp file was empty — skipping")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to read image from clipboard URI", e)
+                }
+            } else if (text.isNotBlank()) {
                 ClipboardAccessibilityService.onClipboardRead(this, text)
             }
 
@@ -250,30 +342,6 @@ class ClipboardGhostActivity : Activity() {
             Log.e(TAG, "Failed to read clipboard", e)
         } finally {
             finishSafely()
-        }
-    }
-
-    /**
-     * Reads image bytes from a content URI in 8 KB chunks to avoid loading the entire
-     * image into a single allocation. Returns null if the URI cannot be read.
-     *
-     * @param uri The content:// URI of the image in the clipboard.
-     * @return Raw image bytes, or null on failure.
-     */
-    private fun readImageBytes(uri: android.net.Uri): ByteArray? {
-        return try {
-            contentResolver.openInputStream(uri)?.use { input ->
-                val buffer = ByteArray(8192)
-                val output = ByteArrayOutputStream()
-                var bytesRead: Int
-                while (input.read(buffer).also { bytesRead = it } != -1) {
-                    output.write(buffer, 0, bytesRead)
-                }
-                output.toByteArray()
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to read image from URI: $uri", e)
-            null
         }
     }
 
@@ -286,11 +354,44 @@ class ClipboardGhostActivity : Activity() {
     private fun copyTextToClipboard(text: String) {
         try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Copied Text", text)
-            clipboard.setPrimaryClip(clip)
+            // Prevent loopback and log to history
+            ClipboardAccessibilityService.lastReadClipboardHash = ClipboardAccessibilityService.hashSHA256(text)
+            ClipboardAccessibilityService.lastSyncedContent = text
+            com.bunty.clipsync.db.HistoryRepository.getInstance(this).addReceived(text, "Text")
+            clipboard.setPrimaryClip(ClipData.newPlainText("Copied Text", text))
         } catch (e: Exception) {
             Log.e(TAG, "Failed to set clipboard", e)
         }
+    }
+
+    /**
+     * Reads an already-decoded JPEG image from [filePath], generates a [FileProvider] URI,
+     * and places it on the system clipboard as an image [ClipData].
+     * The staged file is deleted after use regardless of success or failure.
+     */
+    private fun writeImageFileToClipboard(filePath: String) {
+        val imageFile = java.io.File(filePath)
+        try {
+            if (!imageFile.exists() || imageFile.length() == 0L) {
+                Log.e(TAG, "Staged image file missing or empty: $filePath")
+                return
+            }
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                this,
+                "$packageName.fileprovider",
+                imageFile
+            )
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            // Prevent loopback
+            ClipboardAccessibilityService.lastReadClipboardHash = ClipboardAccessibilityService.hashSHA256(filePath)
+            ClipboardAccessibilityService.lastSyncedContent = filePath
+            com.bunty.clipsync.db.HistoryRepository.getInstance(this).addReceived("[Image]", "Image")
+            clipboard.setPrimaryClip(ClipData.newUri(contentResolver, "Copied Image", uri))
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to write image to clipboard", e)
+        }
+        // File will be cleaned up lazily; we cannot delete it immediately because
+        // the system clipboard holds a reference to the URI until it is cleared.
     }
 
     /**
@@ -316,6 +417,7 @@ class ClipboardGhostActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         safetyHandler.removeCallbacks(safetyTimeout)
+        scope.cancel()
     }
 
     /**

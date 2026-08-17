@@ -99,20 +99,19 @@ object UpdateNotificationManager {
         // the known GitHub releases page as a safe, always-valid fallback.
         val resolvedUrl = downloadUrl.ifBlank { GITHUB_RELEASES_URL }
 
-        // Tapping the notification body launches the browser at the resolved URL.
+        // Tapping the notification body launches MainActivity to show the update dialog.
         // FLAG_ACTIVITY_NEW_TASK is required when starting an Activity from a non-Activity context.
-        val openUrlIntent = Intent(Intent.ACTION_VIEW, Uri.parse(resolvedUrl)).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        val openAppIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
         }
         val contentPendingIntent = PendingIntent.getActivity(
-            context, 0, openUrlIntent,
+            context, 0, openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        // The "View on GitHub" action button reuses the same browser intent but must use a
-        // different request code (1) so the PendingIntent is not collapsed with the body tap.
-        val githubActionPendingIntent = PendingIntent.getActivity(
-            context, 1, openUrlIntent,
+        // The "Install Now" action button reuses the same intent
+        val installActionPendingIntent = PendingIntent.getActivity(
+            context, 1, openAppIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -152,8 +151,8 @@ object UpdateNotificationManager {
             .setContentIntent(contentPendingIntent)
             .addAction(
                 R.drawable.ic_launcher_foreground,
-                if (isTrusted) "View on GitHub" else "Open Anyway",
-                githubActionPendingIntent
+                if (isTrusted) "Install Now" else "Open Anyway",
+                installActionPendingIntent
             )
             .addAction(
                 android.R.drawable.ic_menu_close_clear_cancel,

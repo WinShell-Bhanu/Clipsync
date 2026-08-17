@@ -26,8 +26,10 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import kotlinx.coroutines.delay
 import java.util.concurrent.Executors
+import androidx.compose.runtime.saveable.rememberSaveable
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
@@ -63,16 +65,16 @@ fun CameraQRScanner(
 
     // Guards against processing multiple frames after the first successful decode.
     // Once true, every subsequent frame is immediately closed without being analysed.
-    var hasScanned    by remember { mutableStateOf(false) }
+    var hasScanned    by rememberSaveable { mutableStateOf(false) }
     // Drives the UI switch from the live camera preview to the Lottie loading overlay.
     // Flipped to true the moment a valid QR code is detected in any incoming frame.
-    var showLoading   by remember { mutableStateOf(false) }
+    var showLoading   by rememberSaveable { mutableStateOf(false) }
     // Holds the raw QR payload from the first successful frame analysis.
     // Remains null until a barcode is detected; read by the LaunchedEffect to invoke the callback.
-    var scannedQRCode by remember { mutableStateOf<String?>(null) }
+    var scannedQRCode by rememberSaveable { mutableStateOf<String?>(null) }
     // Retained reference to the camera provider so the camera can be explicitly unbound
     // before the screen exits, releasing hardware resources and preventing leaks.
-    var cameraProvider by remember { mutableStateOf<ProcessCameraProvider?>(null) }
+    var cameraProvider by rememberSaveable { mutableStateOf<ProcessCameraProvider?>(null) }
 
     // Reacts to the showLoading flag becoming true after a successful QR scan.
     // Tears down the camera immediately to release hardware resources, waits just long
@@ -157,6 +159,12 @@ fun CameraQRScanner(
                     },
                     modifier = Modifier.fillMaxSize()
                 )
+                
+                DisposableEffect(lifecycleOwner) {
+                    onDispose {
+                        cameraProvider?.unbindAll()
+                    }
+                }
             }
 
             // Full-screen overlay rendered once a QR code is found, displayed while the camera
@@ -245,7 +253,11 @@ private fun processImageProxy(
             imageProxy.imageInfo.rotationDegrees
         )
 
-        BarcodeScanning.getClient().process(image)
+        val options = BarcodeScannerOptions.Builder()
+            .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+            .build()
+
+        BarcodeScanning.getClient(options).process(image)
             .addOnSuccessListener { barcodes ->
                 for (barcode in barcodes) {
                     // ClipSync QR codes always encode their JSON payload as plain text or a URL.

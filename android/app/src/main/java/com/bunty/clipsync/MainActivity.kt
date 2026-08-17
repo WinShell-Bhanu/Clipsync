@@ -1,8 +1,12 @@
 package com.bunty.clipsync
 
 
+import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.OpenableColumns
 import android.widget.Toast
+import java.io.File
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -30,7 +34,17 @@ import androidx.compose.ui.Modifier
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.saveable.rememberSaveable
 
+
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.layout.Box
 
 /**
  * The sole Activity in the ClipSync Android application.
@@ -55,34 +69,77 @@ class MainActivity : ComponentActivity() {
      * destination and any flags passed through the launching Intent.
      */
     override fun onCreate(savedInstanceState: Bundle?) {
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
         // Query local device storage to decide which screen to open first.
-        // For testing the UI, we force this to always go to the dashboard:
         val isPaired = DeviceManager.isPaired(this)
-        val startDestination = "homescreen" // FORCED FOR TESTING
+        val startDestination = if (isPaired) "homescreen" else "landing"
 
         // For already-paired devices, refresh the FCM push token so the Mac can reach this
         // device. Runs on Dispatchers.IO to avoid a network call on the main thread; the
         // coroutine lifetime is tied to the Activity so it is cancelled on destroy.
-        if (isPaired) {
+        if (isPaired && DeviceManager.getSyncMode(this) == "hybrid") {
             lifecycleScope.launch(Dispatchers.IO) {
                 FCMTokenManager.registerFCMToken(this@MainActivity)
             }
         }
 
         val showUpdateDialog = intent.getBooleanExtra("show_update_dialog", false)
+        handleInstallIntent(intent)
 
         setContent {
             ClipSyncTheme {
-                ClipSyncNavigation(
-                    startDestination = startDestination,
-                    showUpdateDialogOnStart = showUpdateDialog
-                )
+                val scale = remember { Animatable(0.95f) }
+                val alpha = remember { Animatable(0f) }
+
+                LaunchedEffect(Unit) {
+                    launch {
+                        alpha.animateTo(1f, animationSpec = tween(500))
+                    }
+                    launch {
+                        scale.animateTo(1f, animationSpec = tween(500))
+                    }
+                }
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .alpha(alpha.value)
+                        .scale(scale.value)
+                ) {
+                    ClipSyncNavigation(
+                        startDestination = startDestination,
+                        showUpdateDialogOnStart = showUpdateDialog
+                    )
+                }
             }
         }
     }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        handleInstallIntent(intent)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ensureMacPushReceiver()
+    }
+
+    private fun handleInstallIntent(intent: Intent?) {
+        val installReadyApk = intent?.getBooleanExtra("install_ready_apk", false) == true
+        if (installReadyApk && AppUpdateInstaller.hasReadyApk(this)) {
+            AppUpdateInstaller.installReadyApk(this)
+            AppUpdateInstaller.clearReadyApk(this)
+        }
+    }
+
+    private fun ensureMacPushReceiver() {
+        MacPushForegroundService.startIfNeeded(this)
+    }
+
 }
 
 /**
@@ -104,6 +161,7 @@ class MainActivity : ComponentActivity() {
  * | Route                        | Composable         | Purpose                              |
  * |------------------------------|--------------------|--------------------------------------|
  * | `landing`                    | [LandingScreen]    | Welcome screen for first-time users  |
+ * | `landing2`                   | [LandingPage2]     | New landing screen variant (MVVM)    |
  * | `qrscan?startCamera={bool}`  | [QRScanScreen]     | Camera-based Mac pairing via QR code |
  * | `connection`                 | [ConnectionPage]   | Success confirmation after pairing   |
  * | `permission`                 | [PermissionPage]   | Notification / permission onboarding |
@@ -122,13 +180,13 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
 
     // Set to true for ~500 ms when the user taps "Get Started", triggering a speed burst in
     // MeshBackground that adds kinetic energy to the transition into the QR scan screen.
-    var isPulsing by remember { mutableStateOf(false) }
+    var isPulsing by rememberSaveable { mutableStateOf(false) }
     // Freezes the background on every route except "landing". The animation is only meaningful
     // on the landing screen; pausing everywhere else conserves CPU and battery.
-    var isRoutePaused by remember { mutableStateOf(false) }
+    var isRoutePaused by rememberSaveable { mutableStateOf(false) }
     // Mirrors the Activity's foreground/background state. Animation pauses when the user
     // switches away from ClipSync and resumes when the app returns to the foreground.
-    var isAppVisible by remember { mutableStateOf(true) }
+    var isAppVisible by rememberSaveable { mutableStateOf(true) }
 
     val currentBackStackEntry by navController.currentBackStackEntryAsState()
 
@@ -188,12 +246,66 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
             startDestination = startDestination
         ) {
             // Welcome screen shown to first-time and unpaired users.
-            // Tapping "Get Started" triggers a brief background pulse and navigates to the QR scanner.
+            // Tapping "Get Started" triggers a brief background pulse and navigates to SyncMode selection.
             composable("landing") {
                 LandingScreen(
                     onGetStartedClick = {
                         isPulsing = true
-                        navController.navigate("qrscan")
+                        navController.navigate("syncmode")
+                    }
+                )
+            }
+
+            // New landing screen variant (MVVM architecture).
+            // Tapping "Get Started" navigates directly to SyncMode selection.
+            composable("landing2") {
+                LandingPage2(
+                    onGetStartedClick = {
+                        isPulsing = true
+                        navController.navigate("syncmode")
+                    }
+                )
+            }
+
+            // Sync mode selection screen. User picks Hybrid or Local sync.
+            // Selection is persisted to encrypted app storage, then navigates to Bluetooth pairing.
+            composable("syncmode") {
+                val context = navController.context
+                SyncModeScreen(
+                    onModeSelected = { mode ->
+                        // Persist the selected sync mode for use throughout the pairing flow.
+                        DeviceManager.setSyncMode(context, mode)
+                        navController.navigate("bluetooth") {
+                            popUpTo("syncmode") { inclusive = false }
+                        }
+                    }
+                )
+            }
+
+            // Bluetooth pairing discovery screen.
+            composable("bluetooth") {
+                BluetoothScreen(
+                    onPermissionsGranted = {
+                        navController.navigate("pairing") {
+                            // Keep bluetooth on the back stack so the user can go back
+                            popUpTo("bluetooth") { inclusive = false }
+                        }
+                    }
+                )
+            }
+
+            // Device pairing confirmation screen — handles scanning for the Mac and connecting to it.
+            // After GATT read succeeds the flow jumps straight to QR scan.
+            composable("pairing") {
+                PairingPage(
+                    onConnected = {
+                        // GATT handshake done — go scan the Mac's QR code
+                        navController.navigate("qrscan?startCamera=true") {
+                            popUpTo("bluetooth") { inclusive = true }
+                        }
+                    },
+                    onCancel = {
+                        navController.popBackStack()
                     }
                 )
             }
@@ -207,6 +319,73 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
             ) { backStackEntry ->
                 val context = navController.context
                 val startCamera = backStackEntry.arguments?.getBoolean("startCamera") ?: false
+
+                var showMismatchDialog by rememberSaveable { mutableStateOf(false) }
+                var pendingParsedData by rememberSaveable { mutableStateOf<Map<String, Any>?>(null) }
+                var macSyncMode by rememberSaveable { mutableStateOf("") }
+                var androidSyncMode by rememberSaveable { mutableStateOf("") }
+
+                if (showMismatchDialog) {
+                    androidx.compose.material3.AlertDialog(
+                        onDismissRequest = { showMismatchDialog = false },
+                        title = { androidx.compose.material3.Text("Sync Mode Mismatch") },
+                        text = { androidx.compose.material3.Text("Your Mac is set to '$macSyncMode' mode, but this device is set to '$androidSyncMode'. Do you want to switch this device to '$macSyncMode' mode to continue pairing?") },
+                        confirmButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showMismatchDialog = false
+                                val data = pendingParsedData
+                                if (data != null) {
+                                    DeviceManager.setSyncMode(context, macSyncMode)
+
+                                    if (DeviceManager.getSyncMode(context) == "local") {
+                                        DeviceManager.saveLocalPairingFromQr(context, data)
+                                        scope.launch {
+                                            val ackConfirmed = LocalSyncManager.sendPairingScanAck(context)
+                                            if (!ackConfirmed) {
+                                                Toast.makeText(
+                                                    context,
+                                                    "Couldn't confirm pairing with Mac over Bluetooth. Continuing — check Bluetooth is on if the Mac screen doesn't advance.",
+                                                    Toast.LENGTH_LONG
+                                                ).show()
+                                            }
+                                            navController.navigate("localnetwork") {
+                                                popUpTo("landing") { inclusive = true }
+                                            }
+                                        }
+                                    } else {
+                                        FirestoreManager.createPairing(
+                                            context = context,
+                                            qrData = data,
+                                            onSuccess = {
+                                                scope.launch {
+                                                    navController.navigate("localnetwork") {
+                                                        popUpTo("landing") { inclusive = true }
+                                                    }
+                                                }
+                                            },
+                                            onFailure = { e ->
+                                                scope.launch {
+                                                    Toast.makeText(context, "Pairing failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                                    navController.popBackStack()
+                                                }
+                                            }
+                                        )
+                                    }
+                                }
+                            }) {
+                                androidx.compose.material3.Text("Yes, Switch Mode")
+                            }
+                        },
+                        dismissButton = {
+                            androidx.compose.material3.TextButton(onClick = {
+                                showMismatchDialog = false
+                                navController.popBackStack()
+                            }) {
+                                androidx.compose.material3.Text("Cancel")
+                            }
+                        }
+                    )
+                }
 
                 QRScanScreen(
                     initialCameraActive = startCamera,
@@ -228,26 +407,52 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                                 DeviceManager.setTargetRegion(context, qrRegion)
                             }
 
-                            // Write the pairing record to Firestore. On success, clear the back
-                            // stack up to and including landing so pressing Back from the
-                            // connection screen does not return the user to the QR scanner.
-                            FirestoreManager.createPairing(
-                                context = context,
-                                qrData = parsedData,
-                                onSuccess = {
-                                    scope.launch {
-                                        navController.navigate("connection") {
-                                            popUpTo("landing") { inclusive = true }
-                                        }
+                            // Persist the sync mode received from the Mac's QR code.
+                            // This is the mode that was set on the Mac — both devices must match.
+                            val qrSyncMode = parsedData["syncMode"] as? String ?: "hybrid"
+                            val localSyncMode = DeviceManager.getSyncMode(context)
+
+                            if (qrSyncMode != localSyncMode) {
+                                macSyncMode = qrSyncMode
+                                androidSyncMode = localSyncMode
+                                pendingParsedData = parsedData
+                                showMismatchDialog = true
+                            } else if (qrSyncMode == "local") {
+                                DeviceManager.saveLocalPairingFromQr(context, parsedData)
+                                scope.launch {
+                                    val ackConfirmed = LocalSyncManager.sendPairingScanAck(context)
+                                    if (!ackConfirmed) {
+                                        Toast.makeText(
+                                            context,
+                                            "Couldn't confirm pairing with Mac over Bluetooth. Continuing — check Bluetooth is on if the Mac screen doesn't advance.",
+                                            Toast.LENGTH_LONG
+                                        ).show()
                                     }
-                                },
-                                onFailure = { e ->
-                                    scope.launch {
-                                        Toast.makeText(context, "Pairing failed: ${e.message}", Toast.LENGTH_LONG).show()
-                                        navController.popBackStack()
+                                    navController.navigate("localnetwork") {
+                                        popUpTo("landing") { inclusive = true }
                                     }
                                 }
-                            )
+                            } else {
+                                FirestoreManager.createPairing(
+                                    context = context,
+                                    qrData = parsedData,
+                                    onSuccess = {
+                                        scope.launch {
+                                            // Navigate to local-network setup screen first,
+                                            // then proceed to connection screen when done.
+                                            navController.navigate("localnetwork") {
+                                                popUpTo("landing") { inclusive = true }
+                                            }
+                                        }
+                                    },
+                                    onFailure = { e ->
+                                        scope.launch {
+                                            Toast.makeText(context, "Pairing failed: ${e.message}", Toast.LENGTH_LONG).show()
+                                            navController.popBackStack()
+                                        }
+                                    }
+                                )
+                            }
                         } else {
                             // The scanned QR code did not contain recognisable ClipSync pairing
                             // data. Show an error toast and return the user to the scanner to retry.
@@ -260,6 +465,23 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
                         }
                     }
                 )
+            }
+
+            // Local network setup — runs NSD discovery and TCP probe after QR scan.
+            // Automatically proceeds only after the Mac TCP route is verified.
+            composable("localnetwork") {
+                LocalNetworkScreen(
+                    modifier = Modifier.fillMaxSize()
+                )
+                // Auto-advance to connection screen when local setup succeeds.
+                val syncState by LocalSyncManager.state.collectAsState()
+                LaunchedEffect(syncState) {
+                    if (syncState is LocalSyncManager.SyncState.Success) {
+                        navController.navigate("connection") {
+                            popUpTo("localnetwork") { inclusive = true }
+                        }
+                    }
+                }
             }
 
             // Pairing confirmation screen displayed after Firestore successfully records the link.
@@ -285,7 +507,7 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
             // system permissions. Finishing setup navigates to the homescreen and removes this
             // screen from the back stack so Back does not return here.
             composable("permission") {
-                PermissionPage(
+                PermissionPageScreen(
                     onFinishSetup = {
                         navController.navigate("homescreen") {
                             popUpTo("permission") { inclusive = true }
@@ -299,24 +521,22 @@ fun ClipSyncNavigation(startDestination: String, showUpdateDialogOnStart: Boolea
             // scanner active. Reset pairing is triggered after a cloud-side wipe and returns
             // to the landing screen, clearing the entire back stack.
             composable("homescreen") {
-                DashboardScreen(
-                    showUpdateDialogOnStart = showUpdateDialogOnStart,
+                NewHomeScreen(
                     onRepairClick = {
-                        // Erase the local pairing record and immediately open the QR scanner
-                        // with the camera active so the user can scan the new Mac QR code right away.
+                        navController.navigate("diagnostics")
+                    }
+                )
+            }
+
+            composable("diagnostics") {
+                DiagnosticConsoleScreen(
+                    onContinueToRepair = {
                         DeviceManager.clearPairing(navController.context)
-                        navController.navigate("qrscan?startCamera=true") {
+                        navController.navigate("bluetooth") {
                             popUpTo(0) { inclusive = true }
                         }
                     },
-                    onResetPairing = {
-                        // Called after the cloud-side pairing document has been deleted.
-                        // Navigate back to landing and wipe the entire back stack so the user
-                        // starts a fresh onboarding session from the beginning.
-                        navController.navigate("landing") {
-                            popUpTo(0) { inclusive = true }
-                        }
-                    }
+                    onCancel = { navController.popBackStack() }
                 )
             }
         }

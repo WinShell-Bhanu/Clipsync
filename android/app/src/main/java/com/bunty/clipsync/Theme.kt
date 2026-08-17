@@ -59,6 +59,7 @@ val RobotoFontFamily = FontFamily(
     Font(R.font.roboto_black,   FontWeight.Black)
 )
 
+val defaultTypography = Typography()
 val AppTypography = Typography(
     displayLarge = TextStyle(
         fontFamily   = RobotoFontFamily,
@@ -68,6 +69,9 @@ val AppTypography = Typography(
         letterSpacing = (-0.02).sp,
         color        = TextPrimary
     ),
+    displayMedium = defaultTypography.displayMedium.copy(fontFamily = RobotoFontFamily),
+    displaySmall = defaultTypography.displaySmall.copy(fontFamily = RobotoFontFamily),
+    headlineLarge = defaultTypography.headlineLarge.copy(fontFamily = RobotoFontFamily),
     headlineMedium = TextStyle(
         fontFamily = RobotoFontFamily,
         fontWeight = FontWeight.Bold,
@@ -75,6 +79,8 @@ val AppTypography = Typography(
         lineHeight = 32.sp,
         color      = TextPrimary
     ),
+    headlineSmall = defaultTypography.headlineSmall.copy(fontFamily = RobotoFontFamily),
+    titleLarge = defaultTypography.titleLarge.copy(fontFamily = RobotoFontFamily),
     titleMedium = TextStyle(
         fontFamily = RobotoFontFamily,
         fontWeight = FontWeight.SemiBold,
@@ -82,6 +88,7 @@ val AppTypography = Typography(
         lineHeight = 24.sp,
         color      = TextPrimary
     ),
+    titleSmall = defaultTypography.titleSmall.copy(fontFamily = RobotoFontFamily),
     bodyLarge = TextStyle(
         fontFamily = RobotoFontFamily,
         fontWeight = FontWeight.Medium,
@@ -96,6 +103,9 @@ val AppTypography = Typography(
         lineHeight = 18.sp,
         color      = TextSecondary
     ),
+    bodySmall = defaultTypography.bodySmall.copy(fontFamily = RobotoFontFamily),
+    labelLarge = defaultTypography.labelLarge.copy(fontFamily = RobotoFontFamily),
+    labelMedium = defaultTypography.labelMedium.copy(fontFamily = RobotoFontFamily),
     labelSmall = TextStyle(
         fontFamily    = RobotoFontFamily,
         fontWeight    = FontWeight.Bold,

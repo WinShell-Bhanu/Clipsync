@@ -7,38 +7,34 @@ import Security
 
 enum KeychainHelper {
     private static let service = "com.clipsync.encryption"
-    private static let account = "encryption_key"
 
-    // MARK: - Public API
+    // MARK: - Legacy API Compatibility
 
     /// Retrieves the encryption key, migrating from UserDefaults on first access if needed.
     static func getEncryptionKey() -> String? {
-        if let key = readFromKeychain() {
-            return key
-        }
-
-        // Migration: move key from UserDefaults to Keychain
-        if let legacyKey = UserDefaults.standard.string(forKey: "encryption_key") {
-            if saveToKeychain(legacyKey) {
-                UserDefaults.standard.removeObject(forKey: "encryption_key")
-            }
-            return legacyKey
-        }
-
-        return nil
+        migrateFromUserDefaults(udKey: "encryption_key", keychainAccount: "encryption_key")
+        return load(for: "encryption_key")
     }
 
     /// Stores a new encryption key in the Keychain.
     @discardableResult
     static func setEncryptionKey(_ key: String) -> Bool {
-        // Delete any existing key first, then save
-        deleteFromKeychain()
-        return saveToKeychain(key)
+        return save(key, for: "encryption_key")
     }
 
-    // MARK: - Keychain Operations
+    // MARK: - Generic Public API
 
-    private static func readFromKeychain() -> String? {
+    /// Migrates a value from UserDefaults to the Keychain, deleting it from UserDefaults if successful.
+    static func migrateFromUserDefaults(udKey: String, keychainAccount: String) {
+        if let legacyValue = UserDefaults.standard.string(forKey: udKey) {
+            if save(legacyValue, for: keychainAccount) {
+                UserDefaults.standard.removeObject(forKey: udKey)
+            }
+        }
+    }
+
+    /// Retrieves a string value from the Keychain for the given account.
+    static func load(for account: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -59,8 +55,12 @@ enum KeychainHelper {
         return key
     }
 
-    private static func saveToKeychain(_ key: String) -> Bool {
-        guard let data = key.data(using: .utf8) else { return false }
+    /// Stores a string value in the Keychain for the given account.
+    @discardableResult
+    static func save(_ value: String, for account: String) -> Bool {
+        delete(for: account)
+
+        guard let data = value.data(using: .utf8) else { return false }
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -74,7 +74,8 @@ enum KeychainHelper {
         return status == errSecSuccess
     }
 
-    private static func deleteFromKeychain() {
+    /// Deletes a string value from the Keychain for the given account.
+    static func delete(for account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

@@ -4,7 +4,7 @@
 // and a shimmer effect. Auto-dismisses after ~5 seconds with a fade-out animation.
 
 import SwiftUI
-import Lottie
+
 import Shimmer
 
 // MARK: - OTPNotificationBubble
@@ -21,10 +21,11 @@ struct OTPNotificationBubble: View {
 
     var body: some View {
         VStack(spacing: 8) {
-            TickLottieView()
-                .frame(width: 50, height: 50)
-                .scaleEffect(1.2)
-                .id(animationId)
+            Image(systemName: "checkmark.circle.fill")
+                .resizable()
+                .scaledToFit()
+                .foregroundColor(.green)
+                .frame(width: 40, height: 40)
 
             Text(isHovering ? otpCode : String(repeating: "*", count: otpCode.count))
                 .font(.system(size: 20, weight: .bold, design: .rounded))
@@ -38,7 +39,7 @@ struct OTPNotificationBubble: View {
                         .strokeBorder(Color.blue.opacity(0.2), lineWidth: 1)
                 )
                 .onHover { hovering in
-                    withAnimation(.easeInOut(duration: 0.2)) {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 1.0)) {
                         isHovering = hovering
                     }
                 }
@@ -62,7 +63,7 @@ struct OTPNotificationBubble: View {
         .scaleEffect(scale)
         .offset(y: offset)
         .onAppear {
-            withAnimation(.interpolatingSpring(stiffness: 120, damping: 12)) {
+            withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
                 opacity = 1
                 scale = 1
                 offset = 0
@@ -73,7 +74,7 @@ struct OTPNotificationBubble: View {
             }
 
             DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
-                withAnimation(.easeOut(duration: 0.3)) {
+                withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
                     opacity = 0
                     scale = 0.9
                     offset = -10
@@ -93,12 +94,14 @@ class OTPBubbleWindow: NSWindow {
 
 
     init(otpCode: String, statusItemButton: NSStatusBarButton) {
-        let buttonFrame = statusItemButton.window?.convertToScreen(statusItemButton.frame) ?? .zero
+        let buttonFrame = statusItemButton.window?.frame ?? .zero
 
         let bubbleWidth: CGFloat = 220
         let bubbleHeight: CGFloat = 140
-        let xPosition = buttonFrame.midX - (bubbleWidth / 2)
-        let yPosition = buttonFrame.minY - bubbleHeight - 8
+        let screenFrame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1440, height: 900)
+        
+        let xPosition = buttonFrame == .zero ? (screenFrame.maxX - bubbleWidth - 20) : buttonFrame.midX - (bubbleWidth / 2)
+        let yPosition = buttonFrame == .zero ? (screenFrame.maxY - bubbleHeight - 20) : buttonFrame.minY - bubbleHeight - 8
 
         let contentRect = NSRect(
             x: xPosition,
@@ -117,7 +120,7 @@ class OTPBubbleWindow: NSWindow {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = .statusBar
+        self.level = .popUpMenu
         self.collectionBehavior = [.canJoinAllSpaces, .stationary]
         self.isMovable = false
         self.ignoresMouseEvents = false

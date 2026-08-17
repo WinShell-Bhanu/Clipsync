@@ -24,6 +24,7 @@ struct QRGenScreen: View {
 
     @State private var qrCardOpacity: Double = 0
     @State private var qrCardScale: CGFloat = 0.85
+    @State private var isQREnlarged: Bool = false
 
 
     @State private var selectedCountry: String = ""
@@ -34,16 +35,21 @@ struct QRGenScreen: View {
 
     @StateObject private var qrGenerator = QRCodeGenerator.shared
     @StateObject private var pairingManager = PairingManager.shared
+    @StateObject private var wakeupReceiver = WakeupReceiver.shared
     @State private var navigateToConnected = false
+    @State private var navigateToWiFiConnect = false
+
+    private var isLocalOnlyMode: Bool {
+        UserDefaults.standard.string(forKey: "sync_mode") == "local"
+    }
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
         ZStack {
 
-            MeshBackground()
+            MeshBackground(shouldAnimate: false)
                 .ignoresSafeArea()
 
 
@@ -194,17 +200,25 @@ struct QRGenScreen: View {
                             .fill(Color.white.opacity(0.4))
 
                         VStack(spacing: 10) {
-                            Group {
-                                if let qrImage = qrGenerator.qrImage {
-                                    Image(nsImage: qrImage)
-                                        .interpolation(.none)
-                                        .resizable()
-                                } else {
-                                    ProgressView()
-                                        .scaleEffect(1.5)
+                            Button(action: {
+                                withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                                    isQREnlarged = true
                                 }
+                            }) {
+                                Group {
+                                    if let qrImage = qrGenerator.qrImage {
+                                        Image(nsImage: qrImage)
+                                            .interpolation(.none)
+                                            .resizable()
+                                    } else {
+                                        ProgressView()
+                                            .scaleEffect(1.5)
+                                    }
+                                }
+                                .frame(width: 140, height: 140)
+                                .contentShape(Rectangle())
                             }
-                            .frame(width: 140, height: 140)
+                            .buttonStyle(.plain)
 
                             ZStack {
                                 RoundedRectangle(cornerRadius: 14, style: .continuous)
@@ -267,12 +281,54 @@ struct QRGenScreen: View {
                     .padding(.bottom, 20)
                 }
             }
+            
+            if isQREnlarged {
+                Color.black.opacity(0.6)
+                    .ignoresSafeArea()
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            isQREnlarged = false
+                        }
+                    }
+                
+                if let qrImage = qrGenerator.qrImage {
+                    VStack(spacing: 20) {
+                        Image(nsImage: qrImage)
+                            .interpolation(.none)
+                            .resizable()
+                            .frame(width: 320, height: 320)
+                        
+                        Text("Tap anywhere to close")
+                            .font(.custom("SF Pro", size: 14))
+                            .fontWeight(.medium)
+                            .foregroundColor(.black.opacity(0.5))
+                    }
+                    .padding(32)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.3), radius: 30, x: 0, y: 15)
+                    .onTapGesture {
+                        withAnimation(.spring(response: 0.4, dampingFraction: 0.7)) {
+                            isQREnlarged = false
+                        }
+                    }
+                    .transition(.scale(scale: 0.8).combined(with: .opacity))
+                    .zIndex(100)
+                }
+            }
         }
         .frame(width: 590, height: 590)
         .onAppear {
-            detectAndSetupRegion()
             let macDeviceId = DeviceManager.shared.getDeviceId()
-            pairingManager.listenForPairing(macDeviceId: macDeviceId)
+            
+            if isLocalOnlyMode {
+                qrGenerator.generateQRCode()
+                WakeupReceiver.shared.start()
+                ClipSyncServer.shared.start()
+            } else {
+                detectAndSetupRegion()
+                pairingManager.listenForPairing(macDeviceId: macDeviceId)
+            }
             playEntranceAnimations()
         }
         .onChange(of: pairingManager.isPaired) { oldValue, newValue in
@@ -281,13 +337,33 @@ struct QRGenScreen: View {
             // true (race with clearPairing), it would immediately navigate to
             // ConnectedScreen before the user even scans the QR code.
             if oldValue == false && newValue == true {
-                navigateToConnected = true
+                if isLocalOnlyMode {
+                    navigateToWiFiConnect = true
+                } else {
+                    navigateToConnected = true
+                }
             }
+        }
+        .onChange(of: wakeupReceiver.lastPing?.payloadType) { _, newValue in
+            guard isLocalOnlyMode else { return }
+            guard newValue == "pairing_ack" || newValue == "handshake" else { return }
+            completeLocalPairingAndNavigate()
         }
         .navigationDestination(isPresented: $navigateToConnected) {
             ConnectedScreen()
         }
-        .enableInjection()
+        .navigationDestination(isPresented: $navigateToWiFiConnect) {
+            WiFiConnect()
+        }
+    }
+
+    private func completeLocalPairingAndNavigate() {
+        guard !navigateToWiFiConnect else { return }
+        let pairingId = qrGenerator.currentPairingId.isEmpty
+            ? (UserDefaults.standard.string(forKey: "ble_pairing_uuid") ?? UUID().uuidString)
+            : qrGenerator.currentPairingId
+        pairingManager.completeLocalPairing(pairingId: pairingId)
+        navigateToWiFiConnect = true
     }
 
 
@@ -296,6 +372,11 @@ struct QRGenScreen: View {
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     private func detectAndSetupRegion() {
+        if isLocalOnlyMode {
+            self.isDetecting = false
+            return
+        }
+
         if let savedCountry = UserDefaults.standard.string(forKey: "selected_country_name") {
             self.selectedCountry = savedCountry
             self.detectedCountry = savedCountry
@@ -604,7 +685,6 @@ struct CountryPickerView: View {
 private struct NumberCircleView: View {
     let number: String
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
@@ -639,7 +719,6 @@ private struct NumberCircleView: View {
         }
         .frame(width: 34, height: 34)
         .environment(\.colorScheme, .light)
-        .enableInjection()
     }
 }
 

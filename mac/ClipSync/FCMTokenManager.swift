@@ -21,6 +21,10 @@ class FCMTokenManager {
     /// Upserts the FCM token document with platform, projectId, deviceId, deviceName,
     /// and appVersion. Uses merge so existing fields are not overwritten.
     func storeFCMToken(token: String) async {
+        guard UserDefaults.standard.string(forKey: "sync_mode") != "local" else {
+            return
+        }
+
         let deviceId = DeviceManager.shared.getDeviceId()
         let deviceName = DeviceManager.shared.getFriendlyMacName()
 
@@ -43,9 +47,7 @@ class FCMTokenManager {
                 .document(deviceId)
                 .setData(tokenData, merge: true)
             
-            print("✅ FCM token stored in Firestore (projectId: \(projectId))")
         } catch {
-            print("❌ Failed to store FCM token: \(error)")
         }
     }
     
@@ -53,6 +55,10 @@ class FCMTokenManager {
     /// Deletes the token document when the device is unpaired so stale tokens
     /// don't accumulate in Firestore.
     func deleteFCMToken() async {
+        guard UserDefaults.standard.string(forKey: "sync_mode") != "local" else {
+            return
+        }
+
         let deviceId = DeviceManager.shared.getDeviceId()
         
         do {
@@ -61,9 +67,7 @@ class FCMTokenManager {
                 .document(deviceId)
                 .delete()
             
-            print("✅ FCM token deleted from Firestore")
         } catch {
-            print("❌ Failed to delete FCM token: \(error)")
         }
     }
 }

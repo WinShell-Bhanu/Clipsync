@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Private app-scoped downloads (getExternalFilesDir) -->
+    <external-files-path name="external_files_root" path="." />
+    <!-- Public Downloads folder (Environment.DIRECTORY_DOWNLOADS) -->
+    <external-path name="public_downloads" path="Download/" />
+    <!-- Cache folder for received images -->
+    <cache-path name="clipboard_images" path="clipboard_images/" />
+</paths>

@@ -32,10 +32,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
+import androidx.compose.ui.tooling.preview.Preview
 import com.airbnb.lottie.compose.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.min
+import androidx.compose.runtime.saveable.rememberSaveable
 
 
 /**
@@ -167,11 +169,11 @@ fun QRScanScreen(
 
     // The camera feed stays dormant until the user explicitly taps "Scan QR",
     // avoiding unnecessary camera permission prompts on first open.
-    var isCameraActive by remember { mutableStateOf(initialCameraActive) }
+    var isCameraActive by rememberSaveable { mutableStateOf(initialCameraActive) }
     // Shown while the scanned QR payload is being processed (Firestore pairing call).
-    var isLoading by remember { mutableStateOf(false) }
+    var isLoading by rememberSaveable { mutableStateOf(false) }
     // Holds the raw string extracted from the scanned QR code for forwarding to the caller.
-    var scannedData by remember { mutableStateOf("") }
+    var scannedData by rememberSaveable { mutableStateOf("") }
 
     // Lottie composition loaded from the bundled asset file; displayed during loading.
     val composition by rememberLottieComposition(LottieCompositionSpec.Asset("Loading.lottie"))
@@ -179,10 +181,10 @@ fun QRScanScreen(
 
     // Boolean gates for each staggered entrance layer. They are sequentially set to
     // `true` in LaunchedEffect below to create the cascading reveal animation.
-    var showTopCard by remember { mutableStateOf(false) }
-    var showContent by remember { mutableStateOf(false) }
-    var showQR by remember { mutableStateOf(false) }
-    var showButton by remember { mutableStateOf(false) }
+    var showTopCard by rememberSaveable { mutableStateOf(false) }
+    var showContent by rememberSaveable { mutableStateOf(false) }
+    var showQR by rememberSaveable { mutableStateOf(false) }
+    var showButton by rememberSaveable { mutableStateOf(false) }
 
     // Stagger the four entrance layers with 100–200 ms delays so each element arrives
     // visually after the one above it, guiding the user's attention top-to-bottom.
@@ -445,5 +447,16 @@ fun QRScanScreen(
                 )
             }
         }
+    }
+}
+
+@Preview(showBackground = true, widthDp = 360, heightDp = 800)
+@Composable
+private fun QRScanScreenPreview() {
+    ClipSyncTheme {
+        QRScanScreen(
+            initialCameraActive = false,
+            onQRScanned = {}
+        )
     }
 }

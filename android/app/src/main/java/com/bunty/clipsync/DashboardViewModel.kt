@@ -66,14 +66,14 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun updatePermissionsState(
         isAccessibilityEnabled: Boolean,
         isBatteryUnrestricted: Boolean,
-        isSmsPermissionGranted: Boolean,
+
         isNotificationListenerEnabled: Boolean
     ) {
         _uiState.update {
             it.copy(
                 isAccessibilityEnabled = isAccessibilityEnabled,
                 isBatteryUnrestricted = isBatteryUnrestricted,
-                isSmsPermissionGranted = isSmsPermissionGranted,
+
                 isNotificationListenerEnabled = isNotificationListenerEnabled
             )
         }

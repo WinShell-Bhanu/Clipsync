@@ -7,7 +7,6 @@ import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
-import androidx.preference.PreferenceManager
 
 /**
  * A [NotificationListenerService] that monitors email-app notifications for OTP codes and
@@ -58,13 +57,14 @@ class EmailOTPListenerService : NotificationListenerService() {
         private const val MIN_PROCESSING_INTERVAL = 2000L
 
         /**
-         * Allow-list of email app package names whose notifications are inspected for OTP codes.
+         * Allow-list of app package names whose notifications are inspected for OTP codes.
          *
-         * Only notifications from these packages are processed; all others are ignored to keep
-         * CPU and battery overhead to a minimum and to avoid false positives from non-email apps.
-         * Add new packages here when new email clients gain significant adoption.
+         * Covers email clients, SMS/messaging apps, and other OTP-delivering services.
+         * Using Notification Access instead of READ_SMS permission means we can capture
+         * OTPs from WhatsApp, Telegram, SMS apps, and email all through one unified path.
          */
         private val EMAIL_APP_PACKAGES = setOf(
+            // ── Email apps ──
             "com.google.android.gm",               // Gmail
             "com.microsoft.office.outlook",         // Outlook
             "com.yahoo.mobile.client.android.mail", // Yahoo Mail
@@ -73,7 +73,22 @@ class EmailOTPListenerService : NotificationListenerService() {
             "me.bluemail.mail",                     // BlueMail
             "com.android.email",                    // AOSP Email
             "com.fsck.k9",                          // K-9 Mail
-            "com.apple.android.mail"                // (future)
+            "com.apple.android.mail",               // (future)
+            // ── SMS / Messaging apps ──
+            "com.google.android.apps.messaging",    // Google Messages
+            "com.samsung.android.messaging",        // Samsung Messages
+            "com.android.mms",                      // AOSP Messaging
+            "com.android.messaging",                // Stock Android Messaging
+            "org.thoughtcrime.securesms",           // Signal
+            "com.whatsapp",                         // WhatsApp
+            "com.whatsapp.w4b",                     // WhatsApp Business
+            "org.telegram.messenger",               // Telegram
+            "com.bbm",                              // BBM
+            "com.viber.voip",                       // Viber
+            "com.snapchat.android",                 // Snapchat
+            "com.instagram.android",                // Instagram DMs
+            "com.facebook.orca",                    // Messenger
+            "com.truecaller"                        // Truecaller (also shows SMS previews)
         )
 
         /**
@@ -159,6 +174,9 @@ class EmailOTPListenerService : NotificationListenerService() {
 
         if (!EMAIL_APP_PACKAGES.contains(sbn.packageName)) return
 
+        // Respect the user's OTP Sync toggle — bail early if disabled.
+        if (!DeviceManager.isAutoSyncOTPsEnabled(applicationContext)) return
+
         val currentTime = System.currentTimeMillis()
         if (currentTime - lastProcessedTime < MIN_PROCESSING_INTERVAL) return
 
@@ -175,10 +193,7 @@ class EmailOTPListenerService : NotificationListenerService() {
             val fullContent = "$title $text $bigText $subText"
             if (fullContent.isBlank()) return
 
-            val proximityDistance = PreferenceManager.getDefaultSharedPreferences(this)
-                .getInt(OTPListeningService.PREF_KEY_OTP_PROXIMITY, OTPListeningService.DEFAULT_OTP_PROXIMITY)
-
-            if (containsOTPKeyword(fullContent, proximityDistance)) {
+            if (containsOTPKeyword(fullContent)) {
                 val otpCode = extractOTP(fullContent)
 
                 // Only act if we found a new OTP that differs from the last one processed,
@@ -190,7 +205,10 @@ class EmailOTPListenerService : NotificationListenerService() {
 
                     // Write to the Android clipboard so the user can paste immediately if needed.
                     ClipboardGhostActivity.copyToClipboard(this, otpCode)
-                    // Push the OTP to the Mac via Firestore.
+                    // Push directly via TCP/BLE (local route) — works even in local-only mode.
+                    // This bypasses the ghost-activity deduplication that can silently drop the sync.
+                    LocalSyncManager.onClipboardContent(this, otpCode)
+                    // Also push via Firestore for cloud/hybrid route.
                     OTPNotificationService.notifyOTPDetected(this, otpCode)
 
                     // Toast.makeText must run on the main thread; post via mainHandler.
@@ -266,35 +284,12 @@ class EmailOTPListenerService : NotificationListenerService() {
     }
 
     /**
-     * Returns `true` if [content] contains at least one keyword from [OTP_KEYWORDS]
-     * AND a digit sequence of 4–8 digits exists within [proximityDistance] characters
-     * of that keyword.
-     *
-     * The proximity requirement prevents false positives where a keyword appears in
-     * general text while an unrelated number exists elsewhere in the message.
-     *
-     * @param proximityDistance Max character distance between keyword and digit sequence.
-     *        Configurable via SharedPreferences key [OTPListeningService.PREF_KEY_OTP_PROXIMITY].
+     * Returns `true` if [content] contains at least one keyword from [OTP_KEYWORDS].
+     * Lowercases [content] before comparison to ensure the check is case-insensitive.
      */
-    private fun containsOTPKeyword(content: String, proximityDistance: Int): Boolean {
+    private fun containsOTPKeyword(content: String): Boolean {
         val lower = content.lowercase()
-        val digitPattern = Regex("""\d{4,8}""")
-        return OTP_KEYWORDS.any { keyword ->
-            var startIndex = 0
-            var found = false
-            while (startIndex < lower.length) {
-                val keywordIndex = lower.indexOf(keyword, startIndex)
-                if (keywordIndex == -1) break
-                val searchStart = maxOf(0, keywordIndex - proximityDistance)
-                val searchEnd = minOf(lower.length, keywordIndex + keyword.length + proximityDistance)
-                if (digitPattern.containsMatchIn(lower.substring(searchStart, searchEnd))) {
-                    found = true
-                    break
-                }
-                startIndex = keywordIndex + 1
-            }
-            found
-        }
+        return OTP_KEYWORDS.any { keyword -> lower.contains(keyword) }
     }
 
     /**

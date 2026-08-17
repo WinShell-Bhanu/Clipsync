@@ -32,8 +32,8 @@ class OTPNotificationManager: ObservableObject {
     private var currentBubbleWindow: OTPBubbleWindow?
 
 
-    private var sharedSecretHex: String {
-        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
+    private var sharedSecretHex: String? {
+        return KeychainHelper.getEncryptionKey()
     }
 
 
@@ -55,6 +55,11 @@ class OTPNotificationManager: ObservableObject {
     // Returns: Void unless returned explicitly.
     // Notes: Keep logic cohesive and avoid hidden side effects outside this scope.
     func startListening(retryCount: Int = 0) {
+        guard UserDefaults.standard.string(forKey: "sync_mode") != "local" else {
+            stopListening()
+            return
+        }
+
         guard let pairingId = PairingManager.shared.pairingId else {
             if retryCount < 5 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -73,8 +78,7 @@ class OTPNotificationManager: ObservableObject {
             .addSnapshotListener { [weak self] snapshot, error in
                 guard let self = self else { return }
 
-                if let error = error {
-                    print("OTP listener error: \(error)")
+                if error != nil {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) { [weak self] in
                         self?.startListening(retryCount: 0)
                     }
@@ -82,6 +86,10 @@ class OTPNotificationManager: ObservableObject {
                 }
 
                 guard let documents = snapshot?.documents else { return }
+
+                // Check user preference
+                let syncOTPs = UserDefaults.standard.object(forKey: "syncOTPs") as? Bool ?? true
+                guard syncOTPs else { return }
 
                 for document in documents {
                     let data = document.data()
@@ -135,6 +143,13 @@ class OTPNotificationManager: ObservableObject {
     func reshowLastBubble() {
         guard let otpCode = lastOTPCode, hasRecentOTP else { return }
         pingMenuBar(with: otpCode)
+    }
+
+
+    /// Called by ClipSyncServer when an OTP arrives via the local TCP/BLE route instead of
+    /// Firestore. Triggers the same bubble + sound + menu-bar animation as the Firestore path.
+    func triggerBubble(otpCode: String) {
+        handleOTPDetected(otpCode: otpCode)
     }
 
 
@@ -221,7 +236,8 @@ class OTPNotificationManager: ObservableObject {
         guard let data = Data(base64Encoded: base64String) else { return nil }
 
         do {
-            let keyData = hexToData(hex: sharedSecretHex)
+            guard let secretHex = sharedSecretHex else { return nil }
+            let keyData = hexToData(hex: secretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.SealedBox(combined: data)
             let decryptedData = try AES.GCM.open(sealedBox, using: key)

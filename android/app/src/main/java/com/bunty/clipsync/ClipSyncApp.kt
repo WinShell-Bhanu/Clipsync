@@ -43,6 +43,18 @@ class ClipSyncApp : Application() {
     override fun onCreate() {
         super.onCreate()
 
+        // Local-only mode must be able to start fully offline. Device identity is still
+        // required for LAN/BLE sync, but Firebase/Auth are hybrid-only dependencies.
+        try {
+            if (DeviceManager.getSyncMode(this) == "local") {
+                DeviceManager.getDeviceId(this)
+                return
+            }
+        } catch (e: Exception) {
+            Log.e("ClipSync", "Failed to read sync mode on startup (likely Keystore crash)", e)
+            // Fall back to default behavior (continue with Firebase init)
+        }
+
         try {
             // Build FirebaseOptions for the US project. The India project is already handled
             // automatically by the Firebase SDK reading google-services.json, so only the
@@ -67,6 +79,30 @@ class ClipSyncApp : Application() {
         // Trigger device ID generation on first launch. The call is cheap on subsequent
         // launches (just a SharedPreferences read) so there is no cost to calling it here.
         DeviceManager.getDeviceId(this)
+        
+        // Clean up orphaned temp files from previous transfers that were not deleted properly.
+        // These are created during file/image transfers and should be deleted after send.
+        // Any leftover files accumulate as cache bloat — purge them at startup.
+        cleanupTransferCache()
+    }
+
+    /**
+     * Deletes any orphaned temp files left in the app's cache directory by previous transfers.
+     * Patterns:
+     *   - "clip_img_*"  — clipboard image snapshots (created by ClipboardGhostActivity)
+     *   - "share_*"     — files staged for sending from ShareActivity
+     */
+    private fun cleanupTransferCache() {
+        try {
+            cacheDir.listFiles { file ->
+                val name = file.name
+                name.startsWith("clip_img_") || name.startsWith("share_")
+            }?.forEach { file ->
+                val deleted = file.delete()
+            }
+        } catch (e: Exception) {
+            Log.w("ClipSync", "Cache cleanup failed: ${e.message}")
+        }
     }
 
     /**

@@ -80,12 +80,13 @@
 ## Installation
 
 ### macOS
-Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for macOS" button to grab the `Clipsync.Release.pkg`.
+Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for macOS" button to grab `Clipsync.Release.zip`.
 
-**Note:** When opening the `.pkg` for the first time, macOS may block the app with an "unidentified developer" warning—this is completely normal. Just click **'Done'**. Then:
-1. Open **System Settings** ➔ **Privacy and Security**.
-2. Scroll down and click **"Open anyway"**.
-3. Proceed with the installation as usual.
+**Installation steps:**
+1. Unzip the downloaded folder.
+2. Inside the folder, double-click on `Install ClipSync.command`.
+3. If macOS blocks the script with an "unidentified developer" warning, open **System Settings** ➔ **Privacy and Security**, scroll down, and click **"Open anyway"**.
+4. The script will securely install ClipSync into your Applications folder and retain your pairing data.
 
 To enable the ClipSync share extension ➔ Open **System Settings** ➔ **Privacy & Security** ➔ **Extensions** ➔ **Sharing**, and check the box for ClipSync.
 

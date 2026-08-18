@@ -11,11 +11,10 @@ import AppKit
 
 struct LandingScreen: View {
 
-    @State private var navigateToQR = false
+    @State private var navigateToSyncMode = false
     var isBackgroundPaused: Bool = false
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
@@ -63,7 +62,7 @@ struct LandingScreen: View {
 
 
                         Button(action: {
-                            navigateToQR = true
+                            navigateToSyncMode = true
                         }) {
                             Text("Get Started")
                                 .font(.custom("SF Pro Display", size: 20))
@@ -113,7 +112,6 @@ struct LandingScreen: View {
 
                         VStack(spacing: 25) {
                             Button(action: {
-                                print("Learn More tapped")
                             }) {
                                 Text("Learn More")
                                     .font(.custom("SF Pro", size: 14))
@@ -123,7 +121,6 @@ struct LandingScreen: View {
                             .buttonStyle(.plain)
 
                             Button(action: {
-                                print("About tapped")
                             }) {
                                 Text("About")
                                     .font(.custom("SF Pro", size: 14))
@@ -132,18 +129,18 @@ struct LandingScreen: View {
                             }
                             .buttonStyle(.plain)
                         }
-                        .offset(y: 265)
+                        .offset(y: 255)
                     }
                     .frame(width: 590, height: 590)
                     .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
                 }
             }
             .toolbar(.hidden)
-            .navigationDestination(isPresented: $navigateToQR) {
-                QRGenScreen()
+            .navigationDestination(isPresented: $navigateToSyncMode) {
+                SyncMode()
             }
         }
-        .enableInjection()
+        .frame(width: 590, height: 590)
     }
 }
 

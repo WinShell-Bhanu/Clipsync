@@ -29,7 +29,7 @@ class UpdateNotificationManager {
         defaults.set(true, forKey: KEY_HAS_PENDING)
         defaults.synchronize()
         
-        print("✅ Pending update saved: \(version)")
+
     }
     
     

@@ -12,12 +12,13 @@ import UserNotifications
 // MARK: - FinalScreen
 
 struct FinalScreen: View {
-
+    
     @State private var showAccessibilityIcon = false
     @State private var showNetworkIcon = false
     @State private var showNotificationIcon = false
-
-
+    @State private var showExtensionIcon = false
+    
+    
     @State private var titleOpacity: Double = 0
     @State private var titleOffset: CGFloat = -30
     @State private var subtitleOpacity: Double = 0
@@ -26,104 +27,106 @@ struct FinalScreen: View {
     @State private var cardsOffset: CGFloat = 50
     @State private var buttonOpacity: Double = 0
     @State private var buttonScale: CGFloat = 0.8
-
-
-    @State private var isAccessibilityGranted = false
+    
+    
+    
     @State private var isNotificationsGranted = false
-    @State private var networkEnabled = true
-
-
+    @State private var isExtensionGranted = false
+    @AppStorage("PreferredFileStorageLocation") private var storageLocation: String = ""
+    
     @State private var accessibilityIntent = false
     @State private var notificationIntent = false
-
-
+    @State private var extensionIntent = false
+    
+    
     @State private var permissionTimer: Timer?
-
-    #if DEBUG
-    @ObserveInjection var forceRedraw
-    #endif
-
+    @State private var navigateToDashboard = false
+    @State private var showExtensionAlert = false
+    
+#if DEBUG
+#endif
+    
     var body: some View {
         ZStack(alignment: .topLeading) {
-
-            MeshBackground()
+    
+            MeshBackground(shouldAnimate: false)
                 .ignoresSafeArea(.all)
-
-
+            
+            
             Text("Almost there. Just Need a few\npermissions")
                 .font(.custom("SF Pro Display", size: 40))
                 .fontWeight(.bold)
                 .kerning(-1.2)
-                .lineSpacing(8)
+                .lineSpacing(4)
                 .foregroundColor(.white)
-                .padding(.top, 80)
-                .offset(x: 70, y: 25 + titleOffset)
+                .padding(.top, 70)
+                .offset(x: 70, y: 40 + titleOffset)
                 .opacity(titleOpacity)
-
-
+            
+            
             RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(Color.white.opacity(0.15))
-                .frame(width: 520, height: 600)
+                .frame(width: 520, height: 590)
                 .shadow(color: Color.black.opacity(0.1), radius: 10, x: 0, y: 4)
-                .offset(x: 90, y: 215 + cardsOffset)
+                .offset(x: 90, y: 230 + cardsOffset)
                 .opacity(cardsOpacity)
-
-
+            
+            
             Text("To keep ClipSync working smoothly, allow these\npermissions")
                 .font(.custom("SF Pro", size: 24))
                 .fontWeight(.medium)
                 .kerning(-0.66)
                 .foregroundColor(Color(red: 0.125, green: 0.263, blue: 0.600))
                 .multilineTextAlignment(.center)
-                .offset(x: 110, y: 230 + subtitleOffset)
+                .offset(x: 110, y: 250 + subtitleOffset)
                 .opacity(subtitleOpacity)
-
-
+            
+            
+            
             HStack(spacing: 10) {
-                if showAccessibilityIcon {
+                if showNetworkIcon {
                     if #available(macOS 15.0, *) {
-                        Image(systemName: "accessibility")
+                        Image(systemName: "folder.badge.plus")
                             .font(.system(size: 26, weight: .medium))
-                            .foregroundStyle(Color(red: 0.0, green: 0.478, blue: 1.0))
-                            .symbolEffect(.breathe.pulse.byLayer, options: .repeat(.periodic(delay: 2.0)))
+                            .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
+                            .symbolEffect(.bounce.down.byLayer, options: .repeat(.periodic(delay: 2.0)))
                             .frame(width: 30)
                             .transition(.scale.combined(with: .opacity))
                     } else {
-                         Image(systemName: "accessibility")
+                        Image(systemName: "folder.badge.plus")
                             .font(.system(size: 26, weight: .medium))
-                            .foregroundStyle(Color(red: 0.0, green: 0.478, blue: 1.0))
+                            .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
                             .symbolEffect(.variableColor.iterative, options: .repeating)
                             .frame(width: 30)
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-
+                
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("Accessibility")
+                    Text("File Storage Location")
                         .font(.custom("SF Pro", size: 15))
                         .fontWeight(.medium)
                         .foregroundColor(.black)
-
-                    Text("Required so ClipSync can securely read and sync your copied text in the background.")
+                    
+                    Text(storageLocation.isEmpty ? "Select where received files will be saved." : storageLocation)
                         .font(.custom("SF Pro Display", size: 12))
                         .foregroundColor(Color(red: 0.314, green: 0.286, blue: 0.286))
                         .lineLimit(2)
+                        .truncationMode(.middle)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle("", isOn: Binding(
-                    get: { isAccessibilityGranted || accessibilityIntent },
-                    set: { newValue in
-                        if newValue && !isAccessibilityGranted {
-                            accessibilityIntent = true
-                            requestAccessibilityPermission()
-                        } else if !newValue && isAccessibilityGranted {
-                            openSystemSettings()
-                        }
+                
+                Button("Choose...") {
+                    let panel = NSOpenPanel()
+                    panel.canChooseDirectories = true
+                    panel.canChooseFiles = false
+                    panel.allowsMultipleSelection = false
+                    panel.title = "Select Download Folder"
+                    
+                    if panel.runModal() == .OK, let url = panel.url {
+                        storageLocation = url.path
                     }
-                ))
-                .labelsHidden()
-                .toggleStyle(.switch)
+                }
                 .fixedSize()
             }
             .padding(.horizontal, 16)
@@ -133,59 +136,10 @@ struct FinalScreen: View {
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .fill(Color.white.opacity(0.6))
             )
-            .offset(x: 105, y: 320 + cardsOffset)
+            .offset(x: 105, y: 325 + cardsOffset)
             .opacity(cardsOpacity)
-
-
-            HStack(spacing: 10) {
-                if showNetworkIcon {
-                    if #available(macOS 15.0, *) {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 26, weight: .medium))
-                            .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
-                            .symbolEffect(.bounce.down.byLayer, options: .repeat(.periodic(delay: 2.0)))
-                            .frame(width: 30)
-                            .transition(.scale.combined(with: .opacity))
-                    } else {
-                        Image(systemName: "antenna.radiowaves.left.and.right")
-                            .font(.system(size: 26, weight: .medium))
-                            .foregroundStyle(Color(red: 0.204, green: 0.780, blue: 0.349))
-                            .symbolEffect(.variableColor.iterative, options: .repeating)
-                            .frame(width: 30)
-                            .transition(.scale.combined(with: .opacity))
-                    }
-                }
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Network Access")
-                        .font(.custom("SF Pro", size: 15))
-                        .fontWeight(.medium)
-                        .foregroundColor(.black)
-
-                    Text("Allows your Mac to stay linked with your phone for realtime sync.")
-                        .font(.custom("SF Pro Display", size: 12))
-                        .foregroundColor(Color(red: 0.314, green: 0.286, blue: 0.286))
-                        .lineLimit(2)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                Toggle("", isOn: $networkEnabled)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-                    .disabled(true)
-                    .fixedSize()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 10)
-            .frame(width: 480, height: 70)
-            .background(
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(Color.white.opacity(0.6))
-            )
-            .offset(x: 105, y: 420 + cardsOffset)
-            .opacity(cardsOpacity)
-
-
+            
+            
             HStack(spacing: 10) {
                 if showNotificationIcon {
                     if #available(macOS 15.0, *) {
@@ -204,20 +158,20 @@ struct FinalScreen: View {
                             .transition(.scale.combined(with: .opacity))
                     }
                 }
-
+                
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Notifications")
                         .font(.custom("SF Pro", size: 15))
                         .fontWeight(.medium)
                         .foregroundColor(.black)
-
+                    
                     Text("So we can let you know if sync is paused, or when new updates and features arrive.")
                         .font(.custom("SF Pro Display", size: 12))
                         .foregroundColor(Color(red: 0.314, green: 0.286, blue: 0.286))
                         .lineLimit(2)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-
+                
                 Toggle("", isOn: Binding(
                     get: { isNotificationsGranted || notificationIntent },
                     set: { newValue in
@@ -240,13 +194,83 @@ struct FinalScreen: View {
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .fill(Color.white.opacity(0.6))
             )
-            .offset(x: 105, y: 520 + cardsOffset)
+            .offset(x: 105, y: 415 + cardsOffset)
             .opacity(cardsOpacity)
-
-
+            
+            
+            HStack(spacing: 10) {
+                if showExtensionIcon {
+                    if #available(macOS 15.0, *) {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 26, weight: .medium))
+                            .foregroundStyle(Color(red: 0.345, green: 0.337, blue: 0.839))
+                            .symbolEffect(.bounce.up.byLayer, options: .repeat(.periodic(delay: 2.0)))
+                            .frame(width: 30)
+                            .transition(.scale.combined(with: .opacity))
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                            .font(.system(size: 26, weight: .medium))
+                            .foregroundStyle(Color(red: 0.345, green: 0.337, blue: 0.839))
+                            .symbolEffect(.variableColor.iterative, options: .repeating)
+                            .frame(width: 30)
+                            .transition(.scale.combined(with: .opacity))
+                    }
+                }
+                
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Share Extension")
+                        .font(.custom("SF Pro", size: 15))
+                        .fontWeight(.medium)
+                        .foregroundColor(.black)
+                    
+                    Text("Required so you can easily send files to your phone directly from Finder.")
+                        .font(.custom("SF Pro Display", size: 12))
+                        .foregroundColor(Color(red: 0.314, green: 0.286, blue: 0.286))
+                        .lineLimit(2)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                
+                Toggle("", isOn: Binding(
+                    get: { isExtensionGranted || extensionIntent },
+                    set: { newValue in
+                        if newValue && !isExtensionGranted {
+                            extensionIntent = true
+                            showExtensionAlert = true
+                            checkSystemPermissions()
+                        } else if !newValue && isExtensionGranted {
+                            openExtensionsSettings()
+                        }
+                    }
+                ))
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .fixedSize()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(width: 480, height: 70)
+            .background(
+                RoundedRectangle(cornerRadius: 32, style: .continuous)
+                    .fill(Color.white.opacity(0.6))
+            )
+            .offset(x: 105, y: 505 + cardsOffset)
+            .opacity(cardsOpacity)
+            .alert("Enable ClipSync Share Extension", isPresented: $showExtensionAlert) {
+                Button("Open Settings") {
+                    openExtensionsSettings()
+                }
+                Button("Cancel", role: .cancel) {
+                    extensionIntent = false
+                }
+            } message: {
+                Text("In the settings window that opens, click the ⓘ next to 'Sharing' (or 'Added Extensions') and enable ClipSync.")
+            }
+            
+            
             Button(action: {
                 print("Finish Setup tapped")
                 PairingManager.shared.completeSetup()
+                navigateToDashboard = true
             }) {
                 Text("Finish Setup")
                     .font(.custom("SF Pro", size: 17))
@@ -256,7 +280,7 @@ struct FinalScreen: View {
             .frame(width: 132, height: 42)
             .background(RoundedRectangle(cornerRadius: 21).fill(Color.white.opacity(0.8)))
             .buttonStyle(.plain)
-            .offset(x: 270, y: 615)
+            .offset(x: 270, y: 605)
             .scaleEffect(buttonScale)
             .opacity(buttonOpacity)
         }
@@ -273,31 +297,35 @@ struct FinalScreen: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
             checkSystemPermissions()
         }
-        .enableInjection()
+        .navigationDestination(isPresented: $navigateToDashboard) {
+            NewHomeScreen()
+                .navigationBarBackButtonHidden(true)
+        }
     }
-
-
+    
+    
+    
     // MARK: - Animations & Permissions
 
     /// Staggers spring animations for title, subtitle, permission cards, and the finish button.
     private func startAnimations() {
 
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
             titleOpacity = 1
             titleOffset = 0
         }
 
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.1)) {
             subtitleOpacity = 1
             subtitleOffset = 0
         }
 
-        withAnimation(.spring(response: 0.7, dampingFraction: 0.8).delay(0.2)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.2)) {
             cardsOpacity = 1
             cardsOffset = 0
         }
 
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.4)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.4)) {
             buttonOpacity = 1
             buttonScale = 1.0
         }
@@ -306,16 +334,12 @@ struct FinalScreen: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { withAnimation { showAccessibilityIcon = true } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { withAnimation { showNetworkIcon = true } }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { withAnimation { showNotificationIcon = true } }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { withAnimation { showExtensionIcon = true } }
     }
 
 
     /// Reads AXIsProcessTrusted and UNNotificationSettings to refresh toggle states.
     private func checkSystemPermissions() {
-        let axGranted = AXIsProcessTrusted()
-        if isAccessibilityGranted != axGranted {
-            accessibilityIntent = false
-            withAnimation { isAccessibilityGranted = axGranted }
-        }
 
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
@@ -323,6 +347,36 @@ struct FinalScreen: View {
                 if self.isNotificationsGranted != noteGranted {
                     self.notificationIntent = false
                     withAnimation { self.isNotificationsGranted = noteGranted }
+                }
+            }
+        }
+
+        // Check Share Extension status using pluginkit (bypasses App Data TCC prompt)
+        DispatchQueue.global(qos: .userInitiated).async {
+            let task = Process()
+            let pipe = Pipe()
+            
+            task.standardOutput = pipe
+            task.standardError = pipe
+            task.arguments = ["-c", "/usr/bin/pluginkit -m -i com.OP.ClipSync.ClipSyncShare"]
+            task.executableURL = URL(fileURLWithPath: "/bin/sh")
+            
+            var isEnabled = false
+            do {
+                try task.run()
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    // Check if the output starts with a '+' indicating it's enabled
+                    isEnabled = output.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("+")
+                }
+            } catch {
+                print("Failed to run pluginkit: \(error)")
+            }
+            
+            DispatchQueue.main.async {
+                if self.isExtensionGranted != isEnabled {
+                    self.extensionIntent = false
+                    withAnimation { self.isExtensionGranted = isEnabled }
                 }
             }
         }
@@ -339,29 +393,6 @@ struct FinalScreen: View {
 
 
     /// Triggers the AX permission dialog then deep-links into System Settings > Privacy > Accessibility.
-    private func requestAccessibilityPermission() {
-        if isAccessibilityGranted {
-            // Already granted — just open settings to show status
-            openSystemSettings()
-        } else {
-            // Call AXIsProcessTrustedWithOptions with the prompt flag.
-            // This registers the app in the TCC database so it appears in the
-            // Accessibility list, AND shows the system alert on first run.
-            let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
-            let alreadyInTCC = AXIsProcessTrustedWithOptions(options)
-
-            if alreadyInTCC {
-                // App is trusted — polling will pick this up
-                return
-            }
-
-            // Give macOS ~1.5 s to register the app in TCC before opening
-            // Settings. If we open too fast the app isn't in the list yet.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                self.openSystemSettings()
-            }
-        }
-    }
 
 
     /// Shows the system notification permission dialog on first request; opens Settings if already denied.
@@ -401,10 +432,32 @@ struct FinalScreen: View {
             NSWorkspace.shared.open(url)
         }
     }
+
+    /// Deep-links into System Settings > Login Items & Extensions (macOS 13+)
+    private func openExtensionsSettings() {
+        guard let url = URL(string: "x-apple.systempreferences:com.apple.LoginItems-Settings.extension?ExtensionItems") else {
+            openPlainSystemSettings()
+            return
+        }
+        
+        let config = NSWorkspace.OpenConfiguration()
+        NSWorkspace.shared.open(url, configuration: config) { app, error in
+            if error != nil {
+                DispatchQueue.main.async {
+                    self.openPlainSystemSettings()
+                }
+            }
+        }
+    }
+
+    private func openPlainSystemSettings() {
+        if let url = URL(string: "x-apple.systempreferences:") {
+            NSWorkspace.shared.open(url)
+        }
+    }
 }
 
 #Preview {
     FinalScreen()
         .frame(width: 590, height: 590)
 }
-

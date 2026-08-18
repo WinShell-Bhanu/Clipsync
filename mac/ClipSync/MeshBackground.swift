@@ -23,9 +23,6 @@ struct MeshBackground: View {
     @State private var animate = false
     @State private var isTouched = false
 
-    #if DEBUG
-    @ObserveInjection var forceRedraw
-    #endif
 
     var body: some View {
         ZStack {
@@ -42,7 +39,7 @@ struct MeshBackground: View {
                 baseBlur: 60,
                 posA: CGPoint(x: -150, y: -200),
                 posB: CGPoint(x: 150,  y: 100),
-                duration: 1.5
+                duration: 5.0
             )
 
             blob(
@@ -51,7 +48,7 @@ struct MeshBackground: View {
                 baseBlur: 70,
                 posA: CGPoint(x: 200,  y: 100),
                 posB: CGPoint(x: -100, y: -150),
-                duration: 2.0
+                duration: 7.0
             )
 
             blob(
@@ -60,7 +57,7 @@ struct MeshBackground: View {
                 baseBlur: 80,
                 posA: CGPoint(x: -100, y: 250),
                 posB: CGPoint(x: 200,  y: -100),
-                duration: 2.5
+                duration: 9.0
             )
         }
         .drawingGroup()
@@ -80,7 +77,6 @@ struct MeshBackground: View {
                 isTouched = false
             }
         }
-        .enableInjection()
     }
 
 

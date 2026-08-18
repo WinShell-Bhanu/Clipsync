@@ -1,19 +1,16 @@
 package com.bunty.clipsync
 
-import android.Manifest
 import android.accessibilityservice.AccessibilityService
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
-import android.provider.MediaStore
 import android.util.Log
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import com.google.firebase.firestore.ListenerRegistration
+import java.util.concurrent.Executors
 
 /**
  * ClipboardAccessibilityService is the core clipboard-detection engine for ClipSync.
@@ -44,6 +41,7 @@ import com.google.firebase.firestore.ListenerRegistration
 class ClipboardAccessibilityService : AccessibilityService() {
 
     private val handler = Handler(Looper.getMainLooper())
+    private val backgroundExecutor = Executors.newSingleThreadExecutor()
 
     /**
      * When `true`, the next clipboard-change event detected by this service is silently
@@ -57,8 +55,6 @@ class ClipboardAccessibilityService : AccessibilityService() {
     private var lastGhostLaunchTime = 0L
     private var firestoreListener: ListenerRegistration? = null
     private val clearIgnoreRunnable = Runnable { ignoreNextChange = false }
-    private var clipboardChangedListener: ClipboardManager.OnPrimaryClipChangedListener? = null
-    private var screenshotObserver: android.database.ContentObserver? = null
 
     companion object {
         private const val TAG = "ClipSync_Service"
@@ -74,119 +70,10 @@ class ClipboardAccessibilityService : AccessibilityService() {
         var isRunning = false
 
         // ── Multilingual word sets ────────────────────────────────────────────
-
-        /**
-         * Words meaning "Copy" (imperative/verb form) across 22 languages.
-         *
-         * This set is used to identify buttons or menu items labelled "Copy" when the user
-         * taps them. Languages covered: English, Hindi, Bengali, Telugu, Marathi, Tamil,
-         * Gujarati, Kannada, Malayalam, Punjabi, Odia, French, German, Spanish, Portuguese,
-         * Arabic, Turkish, Indonesian, Russian, Japanese, Korean, and Chinese (Simplified
-         * and Traditional).
-         *
-         * The integer constant [AccessibilityNodeInfo.ACTION_COPY] handles most cases where
-         * these words might be absent, so this set acts as a fallback for apps that label
-         * copy actions as plain text without attaching the standard accessibility action.
-         */
-        private val COPY_WORDS = setOf(
-            // English
-            "copy",
-            // Hindi
-            "कॉपी", "नकल करें", "कॉपी करें",
-            // Bengali
-            "কপি", "কপি করুন",
-            // Telugu
-            "కాపీ", "కాపీ చేయి",
-            // Marathi
-            "कॉपी करा",
-            // Tamil
-            "நகலெடு", "நகல்",
-            // Gujarati
-            "નકલ કરો", "કૉપિ",
-            // Kannada
-            "ನಕಲು", "ನಕಲಿಸಿ",
-            // Malayalam
-            "പകർത്തുക", "കോപ്പി",
-            // Punjabi
-            "ਕਾਪੀ ਕਰੋ", "ਕਾਪੀ",
-            // Odia
-            "କପି",
-            // French
-            "copier",
-            // German
-            "kopieren",
-            // Spanish
-            "copiar",
-            // Portuguese
-            "copiar",
-            // Arabic
-            "نسخ",
-            // Turkish
-            "kopyala",
-            // Indonesian
-            "salin",
-            // Russian
-            "копировать", "скопировать",
-            // Japanese
-            "コピー",
-            // Korean
-            "복사",
-            // Chinese (Simplified & Traditional)
-            "复制", "複製"
-        )
-
-        /**
-         * Words meaning "Copied" (past tense or confirmation) across 22 languages.
-         *
-         * Many apps and OS versions display a brief toast or notification after a successful
-         * copy action — e.g. "Copied to clipboard" on Android. This set is used to detect
-         * those confirmations and trigger a clipboard read. The same 22 languages as
-         * [COPY_WORDS] are covered.
-         */
-        private val COPIED_WORDS = setOf(
-            // English
-            "copied",
-            // Hindi
-            "कॉपी किया", "कॉपी हो गया", "नकल की गई",
-            // Bengali
-            "কপি হয়েছে", "কপি করা হয়েছে",
-            // Telugu
-            "కాపీ చేయబడింది",
-            // Marathi
-            "कॉपी केले",
-            // Tamil
-            "நகலெடுக்கப்பட்டது",
-            // Gujarati
-            "નકલ કરી",
-            // Kannada
-            "ನಕಲಿಸಲಾಗಿದೆ",
-            // Malayalam
-            "പകർത്തി",
-            // Punjabi
-            "ਕਾਪੀ ਕੀਤਾ",
-            // French
-            "copié",
-            // German
-            "kopiert",
-            // Spanish
-            "copiado",
-            // Portuguese
-            "copiado",
-            // Arabic
-            "تم النسخ",
-            // Turkish
-            "kopyalandı",
-            // Indonesian
-            "disalin",
-            // Russian
-            "скопировано",
-            // Japanese
-            "コピーしました", "コピー済み",
-            // Korean
-            "복사됨", "복사되었습니다",
-            // Chinese
-            "已复制", "已複製"
-        )
+        // COPY_WORDS and COPIED_WORDS have been migrated to res/values/strings.xml.
+        // They are loaded dynamically in onServiceConnected() to avoid allocating
+        // two large static Sets that would live in the companion object for the
+        // entire lifetime of the process.
 
         /**
          * Words and symbols related to "copyright" notices across several languages.
@@ -227,8 +114,11 @@ class ClipboardAccessibilityService : AccessibilityService() {
          * @param text    The plain-text string read from the clipboard.
          */
         fun onClipboardRead(context: Context, text: String) {
+            if (!DeviceManager.isSyncToMacEnabled(context)) {
+                return
+            }
             if (text.isBlank()) return
-            val currentHash = text.hashCode().toString()
+            val currentHash = hashSHA256(text)
             if (currentHash == lastReadClipboardHash) return
             if (text == lastSyncedContent) {
                 lastReadClipboardHash = currentHash
@@ -236,7 +126,16 @@ class ClipboardAccessibilityService : AccessibilityService() {
             }
             lastSyncedContent     = text
             lastReadClipboardHash = currentHash
-            uploadToFirestoreStatic(context.applicationContext, text)
+            // Upload to Firestore if hybrid sync is enabled
+            val syncMode = DeviceManager.getSyncMode(context)
+            if (syncMode == "hybrid") {
+                uploadToFirestoreStatic(context.applicationContext, text)
+            }
+            
+            // Add minimum logic for LocalSyncManager support
+            if (syncMode != "hybrid") {
+                LocalSyncManager.onClipboardContent(context, text)
+            }
         }
 
         /**
@@ -253,7 +152,7 @@ class ClipboardAccessibilityService : AccessibilityService() {
                 FirestoreManager.sendClipboard(
                     context   = context,
                     text      = text,
-                    onSuccess = { Log.d(TAG, "Clipboard synced to Firestore") },
+                    onSuccess = { },
                     onFailure = { e: Exception ->
                         Log.e(TAG, "Clipboard sync failed: ${e.message}")
                         if (lastSyncedContent == text) lastSyncedContent = ""
@@ -263,6 +162,19 @@ class ClipboardAccessibilityService : AccessibilityService() {
                 Log.e(TAG, "Exception in uploadToFirestoreStatic", e)
             }
         }
+        /**
+         * Returns the SHA-256 hex digest of [text].
+         *
+         * Used by [onClipboardRead], [ClipboardGhostActivity], and [MacPushReceiver] to
+         * fingerprint clipboard content for loopback-detection deduplication. SHA-256 is
+         * chosen over `hashCode()` to make accidental hash collisions cryptographically
+         * negligible for typical clipboard text lengths.
+         */
+        fun hashSHA256(text: String): String {
+            val digest = java.security.MessageDigest.getInstance("SHA-256")
+            val bytes  = digest.digest(text.toByteArray(Charsets.UTF_8))
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
     }
 
     // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -270,93 +182,35 @@ class ClipboardAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         isRunning = true
+        copyWordsCache = resources.getStringArray(R.array.copy_words).toSet()
+        copiedWordsCache = resources.getStringArray(R.array.copied_words).toSet()
         try {
+            ClipboardGhostActivity.cleanupOldStagedImages(this)
             startFirestoreListener()
-            // Start the local image server so the Mac can send images to this device.
-            // Detect screenshots and any image placed in clipboard without an accessibility event.
-            // primaryClipDescription (MIME metadata only) is readable in background on API 29+.
-            val clipboard = getSystemService(CLIPBOARD_SERVICE) as ClipboardManager
-            val listener = ClipboardManager.OnPrimaryClipChangedListener {
-                if (ignoreNextChange) {
-                    Log.d(TAG, "OnPrimaryClipChangedListener fired — suppressed (ignoreNextChange=true)")
-                    return@OnPrimaryClipChangedListener
-                }
-                val desc = clipboard.primaryClipDescription
-                val mimeCount = desc?.mimeTypeCount ?: 0
-                val mimes = (0 until mimeCount).joinToString(", ") { desc!!.getMimeType(it) }
-                Log.d(TAG, "OnPrimaryClipChangedListener fired — mimeTypes=[$mimes], hasImage=${desc?.hasMimeType("image/*") ?: false}")
-                // On Android 14+, primaryClipDescription can be null for background services.
-                // Treat null as "possibly image" and let ClipboardGhostActivity check the real MIME.
-                // For non-null non-image descs, accessibility events already handle text copies.
-                if (desc == null || desc.hasMimeType("image/*")) {
-                    Log.d(TAG, "OnPrimaryClipChangedListener: image or null desc → launching ghost")
-                    handler.postDelayed({ handleClipboardChange("ClipboardChanged") }, 50)
-                } else {
-                    Log.d(TAG, "OnPrimaryClipChangedListener: non-image MIME → skipping (accessibility events handle text)")
-                }
-            }
-            clipboard.addPrimaryClipChangedListener(listener)
-            clipboardChangedListener = listener
-
-            // ── Screenshot detection via MediaStore ContentObserver ────────────────
-            // OnPrimaryClipChangedListener does NOT fire for background services on
-            // Android 12+ (API 31+) when another app writes to clipboard. A
-            // ContentObserver on MediaStore fires as soon as a screenshot is saved to
-            // storage, bypassing the clipboard restriction entirely.
-            val hasMediaPermission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                checkSelfPermission(Manifest.permission.READ_MEDIA_IMAGES) == PackageManager.PERMISSION_GRANTED
-            } else {
-                checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE) == PackageManager.PERMISSION_GRANTED
-            }
-            if (hasMediaPermission) {
-                registerScreenshotObserver()
-            } else {
-                Log.w(TAG, "READ_MEDIA_IMAGES permission not granted — screenshot detection " +
-                    "disabled. Go to Settings → Apps → ClipSync → Permissions → Photos")
-                // Re-check periodically: user might grant the permission later.
-                schedulePermissionRecheck()
-            }
-
-            Log.d(TAG, "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501")
-            Log.d(TAG, "ClipSync service READY")
-            Log.d(TAG, "  Firestore listener  : active")
-            Log.d(TAG, "  Screenshot observer : ${if (screenshotObserver != null) "✅ active" else "❌ OFF (grant READ_MEDIA_IMAGES)"}")
-            Log.d(TAG, "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501")
         } catch (e: Exception) {
             Log.e(TAG, "Error in onServiceConnected", e)
         }
     }
 
-    /**
-     * Registers the [ScreenshotObserver] on MediaStore.
-     * Extracted so it can be called both from [onServiceConnected] and from
-     * the deferred permission re-check.
-     */
-
-    /**
-     * Re-checks READ_MEDIA_IMAGES every 15 seconds until the permission is granted,
-     * then registers the [ScreenshotObserver]. Stops after the observer is registered
-     * or after [onDestroy].
-     */
-    
-
     override fun onInterrupt() {}
+
+    override fun onUnbind(intent: android.content.Intent?): Boolean {
+        firestoreListener?.remove()
+        firestoreListener = null
+        isRunning = false
+        return super.onUnbind(intent)
+    }
 
     override fun onDestroy() {
         super.onDestroy()
         firestoreListener?.remove()
         firestoreListener = null
-        clipboardChangedListener?.let {
-            (getSystemService(CLIPBOARD_SERVICE) as ClipboardManager).removePrimaryClipChangedListener(it)
-        }
-        clipboardChangedListener = null
-        screenshotObserver?.let { contentResolver.unregisterContentObserver(it) }
-        screenshotObserver = null
         handler.removeCallbacksAndMessages(null)
         ignoreNextChange = false
         isRunning        = false
-        // (ImageTransferManager.stopServer(this) was here but incomplete)
     }
+
+    // ── Accessibility event handling ──────────────────────────────────────────
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null || ignoreNextChange) return
@@ -399,10 +253,8 @@ class ClipboardAccessibilityService : AccessibilityService() {
                     // Primary check: the numeric ACTION_COPY ID is reliable across all locales
                     // and is always checked first before any word-based heuristics.
                     val source = event.source
-                    if (isClick && source != null) {
-                        if (source.actionList.any { it.id == AccessibilityNodeInfo.ACTION_COPY }) {
-                            triggerType = "ACTION_COPY"
-                        }
+                    if (isClick && source?.actionList?.any { it.id == AccessibilityNodeInfo.ACTION_COPY } == true) {
+                        triggerType = "ACTION_COPY"
                     }
 
                     // Secondary check: scan event text and contentDescription for copy words,
@@ -418,25 +270,35 @@ class ClipboardAccessibilityService : AccessibilityService() {
                     }
 
                     // Tertiary check: walk the full accessibility node tree as a last resort.
-                    if (triggerType == null && source != null && dfsFindCopy(source, isClick = isClick)) {
-                        triggerType = if (isClick) "Deep Search (Click)" else "Deep Search (Window)"
-                    }
+                    if (triggerType == null && source != null) {
+                        backgroundExecutor.execute {
+                            try {
+                                val found = dfsFindCopy(source, isClick = isClick)
+                                if (found) {
+                                    val finalType = if (isClick) "Deep Search (Click)" else "Deep Search (Window)"
+                                    handler.post {
+                                        lastEventTime = eventTime
+                                        handleClipboardChange(finalType)
+                                    }
+                                }
+                            } finally {
+                                if (Build.VERSION.SDK_INT < 34) {
+                                    @Suppress("DEPRECATION")
+                                    source.recycle()
+                                }
+                            }
+                        }
+                    } else {
+                        // Release the native accessibility node reference on API < 34.
+                        if (Build.VERSION.SDK_INT < 34) {
+                            @Suppress("DEPRECATION")
+                            source?.recycle()
+                        }
 
-                    // Release the native accessibility node reference on API < 34.
-                    // From API 34 onward the framework manages node recycling automatically.
-                    if (Build.VERSION.SDK_INT < 34) {
-                        @Suppress("DEPRECATION")
-                        source?.recycle()
-                    }
-
-                    if (triggerType != null) {
-                        lastEventTime = eventTime
-                        Log.d(TAG, "Copy detected: $triggerType")
-                        // "Click (Copy Button)" events need extra time: Android 14 writes
-                        // screenshot images to the clipboard ~200-300 ms after the tap's
-                        // accessibility event fires. 750 ms is enough margin without feeling slow.
-                        val delay = if (triggerType == "Click (Copy Button)") 750L else 50L
-                        handler.postDelayed({ handleClipboardChange(triggerType) }, delay)
+                        if (triggerType != null) {
+                            lastEventTime = eventTime
+                            handler.postDelayed({ handleClipboardChange(triggerType) }, 50)
+                        }
                     }
                 }
 
@@ -510,16 +372,19 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
     // ── Multilingual word matchers ────────────────────────────────────────────
 
-    /** Returns `true` if [text] contains at least one word from [COPY_WORDS] (case-insensitive). */
+    private var copyWordsCache = emptySet<String>()
+    private var copiedWordsCache = emptySet<String>()
+
+    /** Returns `true` if [text] contains at least one word from copyWordsCache (case-insensitive). */
     private fun containsCopyWord(text: String): Boolean {
         val lower = text.lowercase()
-        return COPY_WORDS.any { lower.contains(it.lowercase()) }
+        return copyWordsCache.any { lower.contains(it.lowercase()) }
     }
 
-    /** Returns `true` if [text] contains at least one word from [COPIED_WORDS] (case-insensitive). */
+    /** Returns `true` if [text] contains at least one word from copiedWordsCache (case-insensitive). */
     private fun containsCopiedWord(text: String): Boolean {
         val lower = text.lowercase()
-        return COPIED_WORDS.any { lower.contains(it.lowercase()) }
+        return copiedWordsCache.any { lower.contains(it.lowercase()) }
     }
 
     /** Returns `true` if [text] contains at least one word from [COPYRIGHT_WORDS] (case-insensitive). */
@@ -544,13 +409,10 @@ class ClipboardAccessibilityService : AccessibilityService() {
      */
     private fun handleClipboardChange(trigger: String = "Unknown") {
         if (ignoreNextChange) return
-        
         val now = System.currentTimeMillis()
         if (now - lastGhostLaunchTime < GHOST_LAUNCH_DEBOUNCE_MS) return
-        
+        lastGhostLaunchTime = now
         try {
-            lastGhostLaunchTime = now
-            Log.d(TAG, "Clipboard change detected via [$trigger], launching ghost reader")
             ClipboardGhostActivity.readFromClipboard(this)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to launch ghost activity", e)
@@ -587,7 +449,7 @@ class ClipboardAccessibilityService : AccessibilityService() {
 
                 lastSyncedContent     = content
                 lastClipboardContent  = content
-                lastReadClipboardHash = content.hashCode().toString()
+                lastReadClipboardHash = hashSHA256(content)
 
                 ClipboardGhostActivity.copyToClipboard(this@ClipboardAccessibilityService, content)
                 handler.postDelayed(clearIgnoreRunnable, IGNORE_LOCAL_CHANGE_MS)
@@ -600,46 +462,6 @@ class ClipboardAccessibilityService : AccessibilityService() {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
-
-    /**
-     * Registers a ContentObserver on the MediaStore Images URI to detect when a new
-     * screenshot is written to storage. Fires handleClipboardChange so the screenshot
-     * can be read via ClipboardGhostActivity.
-     */
-    private fun registerScreenshotObserver() {
-        val observer = object : android.database.ContentObserver(handler) {
-            override fun onChange(selfChange: Boolean, uri: android.net.Uri?) {
-                Log.d(TAG, "Screenshot observer: change detected uri=$uri")
-                handler.postDelayed({ handleClipboardChange("Screenshot") }, 300)
-            }
-        }
-        contentResolver.registerContentObserver(
-            android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            true,
-            observer
-        )
-        screenshotObserver = observer
-        Log.d(TAG, "Screenshot ContentObserver registered")
-    }
-
-    /**
-     * Schedules a periodic check for READ_MEDIA_IMAGES permission so the screenshot
-     * observer can be registered if the user later grants the permission.
-     */
-    private fun schedulePermissionRecheck() {
-        handler.postDelayed({
-            val hasPermission = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-                checkSelfPermission(android.Manifest.permission.READ_MEDIA_IMAGES) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            } else {
-                checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) == android.content.pm.PackageManager.PERMISSION_GRANTED
-            }
-            if (hasPermission) {
-                registerScreenshotObserver()
-            } else {
-                schedulePermissionRecheck() // keep checking every 30s
-            }
-        }, 30_000L)
-    }
 
     /**
      * Returns `true` if the app identified by [packageName] is categorised as a game

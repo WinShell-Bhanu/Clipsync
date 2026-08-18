@@ -3,6 +3,7 @@ package com.bunty.clipsync
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.Build
+import android.provider.Settings
 import android.util.Log
 import android.widget.Toast
 import androidx.security.crypto.EncryptedSharedPreferences
@@ -48,7 +49,21 @@ object DeviceManager {
     private const val KEY_SYNC_FROM_MAC      = "sync_from_mac"
     private const val KEY_REGION             = "server_region"
     private const val KEY_AUTO_SYNC_OTPS     = "auto_sync_otps"
+    private const val KEY_AUTO_SYNC_SCREENSHOTS = "auto_sync_screenshots"
     private const val KEY_ENCRYPTION_FAILURE_POLICY = "encryption_failure_policy"
+    private const val KEY_SYNC_MODE = "sync_mode"
+    /** BLE address of the paired Mac — used by [WakeupPingSender] for wakeup pings. */
+    private const val KEY_MAC_BLE_ADDRESS    = "mac_ble_address"
+    /** Last known LAN IP of the paired Mac — discovered via BLE characteristic read. */
+    private const val KEY_MAC_LOCAL_IP       = "mac_local_ip"
+    /** Last known LAN port of the paired Mac TCP server. */
+    private const val KEY_MAC_LOCAL_PORT     = "mac_local_port"
+    /** Toggle for Ultra Fast (Unencrypted Zero-Copy) Mode */
+    private const val KEY_ULTRA_FAST_MODE    = "ultra_fast_mode"
+    /** Default directory URI string for saving received files. */
+    private const val KEY_DEFAULT_SAVE_DIR   = "default_save_dir"
+    /** SSID under which the Mac's local IP was last resolved via BLE. Used to detect network changes. */
+    private const val KEY_MAC_CACHE_SSID     = "mac_cache_ssid"
 
     /**
      * Policy values for [getEncryptionFailurePolicy]:
@@ -65,6 +80,23 @@ object DeviceManager {
      * to switch Firebase instances. Defaults to `"IN"` (India).
      */
     var initializedRegion: String = "IN"
+
+    // ── Device Identity helpers ───────────────────────────────────────────────
+
+    fun getDefaultSaveDirectory(context: Context): String? =
+        getPrefs(context).getString(KEY_DEFAULT_SAVE_DIR, null)
+
+    fun saveDefaultSaveDirectory(context: Context, uriString: String) {
+        getPrefs(context).edit().putString(KEY_DEFAULT_SAVE_DIR, uriString).commit()
+    }
+
+    fun isUltraFastModeEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean(KEY_ULTRA_FAST_MODE, false)
+    }
+
+    fun setUltraFastModeEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_ULTRA_FAST_MODE, enabled).apply()
+    }
 
     // ── Region helpers ────────────────────────────────────────────────────────
 
@@ -141,7 +173,12 @@ object DeviceManager {
                 val file = java.io.File(context.applicationInfo.dataDir,
                     "shared_prefs/$ENCRYPTED_PREFS_NAME.xml")
                 file.delete()
-                createEncryptedPrefs(context)
+                try {
+                    createEncryptedPrefs(context)
+                } catch (e2: Exception) {
+                    Log.e("DeviceManager", "Second attempt to create EncryptedSharedPreferences failed! Falling back to plain SharedPreferences", e2)
+                    context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                }
             }
             // C1: transparent migration from legacy plain-text SharedPreferences
             migrateFromPlainPrefs(context, encPrefs)
@@ -180,7 +217,6 @@ object DeviceManager {
         val legacyKey = legacyPrefs.getString(KEY_ENCRYPTION_KEY, null)
         if (legacyPairingId == null && legacyKey == null) return // nothing to migrate
 
-        Log.i("DeviceManager", "Migrating legacy plaintext prefs to EncryptedSharedPreferences")
         val editor = encPrefs.edit()
         // Migrate all known keys
         legacyPrefs.getString(KEY_ENCRYPTION_KEY, null)?.let { editor.putString(KEY_ENCRYPTION_KEY, it) }
@@ -190,6 +226,7 @@ object DeviceManager {
         legacyPrefs.getString(KEY_ANDROID_DEVICE_ID, null)?.let { editor.putString(KEY_ANDROID_DEVICE_ID, it) }
         legacyPrefs.getString(KEY_ANDROID_DEVICE_NAME, null)?.let { editor.putString(KEY_ANDROID_DEVICE_NAME, it) }
         legacyPrefs.getString(KEY_REGION, null)?.let { editor.putString(KEY_REGION, it) }
+        legacyPrefs.getString(KEY_SYNC_MODE, null)?.let { editor.putString(KEY_SYNC_MODE, it) }
         if (legacyPrefs.contains(KEY_PAIRED)) editor.putBoolean(KEY_PAIRED, legacyPrefs.getBoolean(KEY_PAIRED, false))
         if (legacyPrefs.contains(KEY_SYNC_TO_MAC)) editor.putBoolean(KEY_SYNC_TO_MAC, legacyPrefs.getBoolean(KEY_SYNC_TO_MAC, true))
         if (legacyPrefs.contains(KEY_SYNC_FROM_MAC)) editor.putBoolean(KEY_SYNC_FROM_MAC, legacyPrefs.getBoolean(KEY_SYNC_FROM_MAC, true))
@@ -197,7 +234,6 @@ object DeviceManager {
 
         // Wipe the old plaintext file
         legacyPrefs.edit().clear().commit()
-        Log.i("DeviceManager", "Legacy prefs migration complete — old data wiped")
     }
 
     /**
@@ -249,15 +285,16 @@ object DeviceManager {
 
     /**
      * Atomically persists all pairing data to [SharedPreferences] after a successful
-     * QR scan and Firestore document creation.
+     * QR scan and pairing handshake.
      *
      * Writes the following values in a single editor transaction:
      * - `is_paired` flag set to `true`.
-     * - Firestore pairing document ID.
+     * - Pairing ID. In hybrid mode this is the Firestore document ID; in local mode it
+     *   is the offline UUID carried by the Mac QR payload.
      * - Paired Mac device ID and display name.
      * - This Android device's display name (captured at pairing time).
      *
-     * @param pairingId      The Firestore document ID of the newly created pairing record.
+     * @param pairingId      The active pairing ID.
      * @param macDeviceId    The unique identifier of the paired Mac.
      * @param macDeviceName  The human-readable display name of the Mac.
      */
@@ -267,7 +304,7 @@ object DeviceManager {
         macDeviceId: String,
         macDeviceName: String
     ) {
-        val androidDeviceName = getAndroidDeviceName()
+        val androidDeviceName = getAndroidDeviceName(context)
 
         getPrefs(context).edit().apply {
             putBoolean(KEY_PAIRED,              true)
@@ -277,6 +314,35 @@ object DeviceManager {
             putString(KEY_ANDROID_DEVICE_NAME,  androidDeviceName)
             apply()
         }
+    }
+
+    /**
+     * Persists an offline local-only pairing directly from the Mac QR payload.
+     *
+     * This intentionally does not create or validate any Firestore document. The QR code
+     * already contains the shared encryption key, Mac identity, and offline pairing UUID
+     * needed for LAN/BLE sync.
+     */
+    fun saveLocalPairingFromQr(context: Context, qrData: Map<String, Any>): String {
+        val pairingId = (qrData["pairingId"] as? String)
+            ?.takeIf { it.isNotBlank() }
+            ?: UUID.randomUUID().toString()
+        val macDeviceId = qrData["macDeviceId"] as? String ?: ""
+        val macDeviceName = qrData["macDeviceName"] as? String ?: "Mac"
+        val secret = qrData["secret"] as? String
+
+        if (!secret.isNullOrEmpty()) {
+            saveEncryptionKey(context, secret)
+        }
+
+        savePairing(
+            context = context,
+            pairingId = pairingId,
+            macDeviceId = macDeviceId,
+            macDeviceName = macDeviceName
+        )
+        setSyncMode(context, "local")
+        return pairingId
     }
 
     /**
@@ -298,7 +364,17 @@ object DeviceManager {
      * Examples of returned values: `"Samsung Galaxy S23"`, `"Google Pixel 8"`,
      * `"Xiaomi Redmi Note"`, `"Android Emulator"`.
      */
-    fun getAndroidDeviceName(): String {
+    fun getAndroidDeviceName(context: Context? = null): String {
+        if (context != null) {
+            val configuredName = runCatching {
+                Settings.Global.getString(context.contentResolver, Settings.Global.DEVICE_NAME)
+            }.getOrNull()?.trim()
+
+            if (!configuredName.isNullOrEmpty()) {
+                return configuredName.take(30)
+            }
+        }
+
         val manufacturer = Build.MANUFACTURER ?: ""
         val model        = Build.MODEL        ?: "Android"
 
@@ -366,6 +442,19 @@ object DeviceManager {
     fun saveEncryptionKey(context: Context, key: String) {
         getPrefs(context).edit().putString(KEY_ENCRYPTION_KEY, key).apply()
     }
+
+    /** Persists the selected sync mode in encrypted app storage. */
+    fun setSyncMode(context: Context, mode: String) {
+        val normalized = when (mode.lowercase()) {
+            "local", "local_only", "local-only" -> "local"
+            else -> "hybrid"
+        }
+        getPrefs(context).edit().putString(KEY_SYNC_MODE, normalized).apply()
+    }
+
+    /** Returns the selected sync mode. Defaults to hybrid until the user chooses. */
+    fun getSyncMode(context: Context): String =
+        getPrefs(context).getString(KEY_SYNC_MODE, "hybrid") ?: "hybrid"
 
     // ── Encryption failure policy ──────────────────────────────────────────────
 
@@ -436,4 +525,76 @@ object DeviceManager {
     fun setAutoSyncOTPsEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_AUTO_SYNC_OTPS, enabled).apply()
     }
+
+    /**
+     * Returns `true` if the user has enabled auto-sync for Screenshots (default: `true`).
+     */
+    fun isAutoSyncScreenshotsEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_AUTO_SYNC_SCREENSHOTS, true)
+
+    /** Persists the "Auto-Sync Screenshots" toggle state. */
+    fun setAutoSyncScreenshotsEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_AUTO_SYNC_SCREENSHOTS, enabled).apply()
+    }
+
+    // ── Local sync — Mac BLE address ──────────────────────────────────────────
+
+    /**
+     * Stores the BLE address of the paired Mac so [WakeupPingSender] can open a GATT
+     * connection later to deliver wakeup pings.
+     *
+     * Called from [BLEConnector] after a successful GATT read of the DeviceName characteristic.
+     */
+    fun saveMacBleAddress(context: Context, address: String) {
+        getPrefs(context).edit().putString(KEY_MAC_BLE_ADDRESS, address).apply()
+    }
+
+    /** Returns the stored BLE address of the paired Mac, or `null` if not yet stored. */
+    fun getMacBleAddress(context: Context): String? =
+        getPrefs(context).getString(KEY_MAC_BLE_ADDRESS, null)
+
+    // ── Local sync — Mac LAN IP ───────────────────────────────────────────────
+
+    /**
+     * Caches the Mac's LAN IP address discovered via BLE characteristic read.
+     * Used by [LocalSyncManager] for TCP connections after BLE resolves the IP.
+     */
+    fun saveMacLocalIp(context: Context, ip: String) {
+        getPrefs(context).edit().putString(KEY_MAC_LOCAL_IP, ip).apply()
+    }
+
+    /** Returns the last discovered LAN IP of the Mac, or `null` if not yet cached. */
+    fun getMacLocalIp(context: Context): String? =
+        getPrefs(context).getString(KEY_MAC_LOCAL_IP, null)
+
+    /**
+     * Atomically saves both the Mac's LAN IP and TCP port.
+     */
+    fun saveMacLocalEndpoint(context: Context, host: String, port: Int) {
+        getPrefs(context).edit()
+            .putString(KEY_MAC_LOCAL_IP, host)
+            .putInt(KEY_MAC_LOCAL_PORT, port)
+            .apply()
+    }
+
+    /**
+     * Returns the TCP port of the Mac's ClipSync server.
+     * Defaults to 8765 if not yet discovered.
+     */
+    fun getMacLocalPort(context: Context): Int =
+        getPrefs(context).getInt(KEY_MAC_LOCAL_PORT, 8765)
+
+    /**
+     * Saves the SSID of the network on which the Mac's local IP was last discovered.
+     * Used by [LocalSyncManager] to detect a network switch and invalidate the stale IP cache.
+     */
+    fun saveMacCacheNetwork(context: Context, ssid: String?) {
+        getPrefs(context).edit().putString(KEY_MAC_CACHE_SSID, ssid).apply()
+    }
+
+    /**
+     * Returns the SSID under which the Mac's local IP was last cached, or null if unknown.
+     */
+    fun getMacCacheNetwork(context: Context): String? =
+        getPrefs(context).getString(KEY_MAC_CACHE_SSID, null)
 }

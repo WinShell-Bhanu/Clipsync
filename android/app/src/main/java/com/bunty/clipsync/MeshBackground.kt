@@ -20,6 +20,9 @@ import androidx.compose.ui.unit.dp
 import kotlin.math.cos
 import kotlin.math.sin
 import androidx.compose.runtime.withFrameNanos
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collectLatest
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * A full-screen animated background that produces a flowing "mesh gradient" or "aurora" effect
@@ -43,20 +46,23 @@ import androidx.compose.runtime.withFrameNanos
  * Animation control:
  *  - [isPaused]: freezes the [time] counter so the background stops moving entirely. Used to
  *    conserve CPU/GPU on screens that do not benefit from a live animated background.
+ *  - [autoPauseDelayMillis]: after a set duration, automatically sets the internal pause state.
  *  - [onPulse]: causes the effective speed to jump to 4× normal for a dramatic burst (e.g.
  *    immediately after the user initiates a QR scan). Transitions in and out of pulse speed are
  *    smoothed over 1 000 ms with a linear interpolation so the change never feels jarring.
  *
- * @param modifier   Modifier applied to the outermost [Box]; typically [Modifier.fillMaxSize].
- * @param onPulse    Pass `true` briefly to accelerate the animation to 4× speed on user action.
- * @param isPaused   Pass `true` to freeze the animation entirely and conserve battery/CPU.
- * @param content    The composable subtree to render layered on top of the animated background.
+ * @param modifier             Modifier applied to the outermost [Box]; typically [Modifier.fillMaxSize].
+ * @param onPulse              Pass `true` briefly to accelerate the animation to 4× speed on user action.
+ * @param isPaused             Pass `true` to freeze the animation entirely and conserve battery/CPU.
+ * @param autoPauseDelayMillis Automatically pauses the animation after this duration (in ms) if positive.
+ * @param content              The composable subtree to render layered on top of the animated background.
  */
 @Composable
 fun MeshBackground(
     modifier: Modifier = Modifier,
     onPulse: Boolean = false,
     isPaused: Boolean = false,
+    autoPauseDelayMillis: Long = -1L,
     content: @Composable () -> Unit
 ) {
     val configuration = LocalConfiguration.current
@@ -72,14 +78,24 @@ fun MeshBackground(
 
     // Monotonically increasing time value fed into the sine/cosine position functions.
     // Incremented each vsync frame by an amount proportional to the current speed multiplier.
-    var time by remember { mutableFloatStateOf(0f) }
+    var time by rememberSaveable { mutableFloatStateOf(0f) }
+
+    // Automatic pause handling after a specified delay
+    var isAutoPaused by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(autoPauseDelayMillis) {
+        if (autoPauseDelayMillis > 0) {
+            delay(autoPauseDelayMillis)
+            isAutoPaused = true
+        }
+    }
 
     // Resolve the desired animation speed from the current mode:
-    //   isPaused  → 0.0  (counter frozen, animation stationary)
-    //   onPulse   → 4.0  (four times normal speed for a dramatic burst)
-    //   default   → 1.0  (steady background motion)
+    //   isPaused or isAutoPaused  → 0.0  (counter frozen, animation stationary)
+    //   onPulse                   → 4.0  (four times normal speed for a dramatic burst)
+    //   default                   → 1.0  (steady background motion)
     val targetSpeed = when {
-        isPaused -> 0f
+        isPaused || isAutoPaused -> 0f
         onPulse -> 4f
         else -> 1f
     }
@@ -93,13 +109,15 @@ fun MeshBackground(
     )
 
     // Frame loop: advances `time` on every display vsync by an amount proportional to `speed`.
-    // The threshold guard (speed > 0.01f) skips the state write when the animation is effectively
-    // paused, avoiding unnecessary recompositions and Canvas redraws when nothing is changing.
+    // Uses snapshotFlow to collect changes in speed. When speed <= 0.01f, the collector terminates
+    // the inner frame loop, completely stopping withFrameNanos calls and avoiding CPU/GPU overhead.
     LaunchedEffect(Unit) {
-        while (true) {
-            withFrameNanos {
-                if (speed > 0.01f) {
-                    time += 0.008f * speed
+        snapshotFlow { speed > 0.01f }.collectLatest { isActive ->
+            if (isActive) {
+                while (true) {
+                    withFrameNanos {
+                        time += 0.008f * speed
+                    }
                 }
             }
         }

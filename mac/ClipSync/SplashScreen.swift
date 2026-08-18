@@ -15,7 +15,6 @@ struct SplashScreen: View {
     @State private var startOscillation = false
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
@@ -28,7 +27,7 @@ struct SplashScreen: View {
 
             MeshBackground(
                 introProgress: progress,
-                shouldAnimate: startOscillation
+                shouldAnimate: false
             )
             .frame(width: frameSize, height: frameSize)
 
@@ -58,7 +57,6 @@ struct SplashScreen: View {
                 }
             }
         }
-        .enableInjection()
     }
 }
 
@@ -74,7 +72,6 @@ struct LandingScreenAnimatedContent: View {
     @State private var navigateToQR = false
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
@@ -158,7 +155,7 @@ struct LandingScreenAnimatedContent: View {
 
             if showFooter {
                 VStack(spacing: 15) {
-                    Button(action: { print("Learn More tapped") }) {
+                    Button(action: {  }) {
                         Text("Learn More")
                             .font(.custom("SF Pro", size: 14))
                             .fontWeight(.medium)
@@ -166,7 +163,7 @@ struct LandingScreenAnimatedContent: View {
                     }
                     .buttonStyle(.plain)
 
-                    Button(action: { print("About tapped") }) {
+                    Button(action: {  }) {
                         Text("About")
                             .font(.custom("SF Pro", size: 14))
                             .fontWeight(.medium)
@@ -189,7 +186,6 @@ struct LandingScreenAnimatedContent: View {
             withAnimation(.spring(response: 0.55, dampingFraction: 0.8).delay(0.4)) { showButton = true }
             withAnimation(.easeOut(duration: 0.4).delay(0.55)) { showFooter = true }
         }
-        .enableInjection()
     }
 }
 

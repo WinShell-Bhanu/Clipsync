@@ -47,7 +47,6 @@ object FCMTokenManager {
     suspend fun registerFCMToken(context: Context) {
         try {
             val token = FirebaseMessaging.getInstance().token.await()
-            Log.d(TAG, "FCM token retrieved")
             storeFCMToken(context, token)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to retrieve FCM token", e)
@@ -55,7 +54,9 @@ object FCMTokenManager {
     }
 
     /**
-     * Persists the given FCM token and associated device metadata to Firestore.
+     * Persists the given FCM token and associated device metadata to Firestore, then
+     * subscribes the device to the `all_devices` FCM topic so broadcast messages from
+     * the Firebase Console reach every registered device simultaneously.
      *
      * The document is written with [SetOptions.merge] so that any extra fields stored
      * by other parts of the app are not overwritten — only the fields listed below are
@@ -97,10 +98,11 @@ object FCMTokenManager {
                 .set(tokenData, SetOptions.merge())
                 .await()
 
-            Log.d(TAG, "FCM token stored in Firestore (projectId: $projectId)")
-            // Topic subscription removed: broadcasting to "all_devices" means anyone with
-            // leaked Firebase credentials could push to every ClipSync user simultaneously.
-            // Per-device FCM tokens (already stored above) are sufficient for targeted pushes.
+            // Subscribing to "all_devices" enables sending a single FCM message from the
+            // Firebase Console that targets every device regardless of deviceId or region.
+            FirebaseMessaging.getInstance().subscribeToTopic("all_devices")
+                .addOnSuccessListener { }
+                .addOnFailureListener { Log.e(TAG, "Failed to subscribe to topic", it) }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to store FCM token", e)
         }
@@ -126,8 +128,6 @@ object FCMTokenManager {
                 .document(deviceId)
                 .delete()
                 .await()
-
-            Log.d(TAG, "FCM token deleted from Firestore")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to delete FCM token", e)
         }

@@ -5,7 +5,6 @@ data class DashboardState(
     val isPaired: Boolean = false,
     val isAccessibilityEnabled: Boolean = false,
     val isBatteryUnrestricted: Boolean = false,
-    val isSmsPermissionGranted: Boolean = false,
     val isNotificationListenerEnabled: Boolean = false,
     val syncToMac: Boolean = true,
     val syncFromMac: Boolean = true,

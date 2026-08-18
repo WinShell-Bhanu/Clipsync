@@ -3,18 +3,19 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.compose.compiler)
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
     namespace = "com.bunty.clipsync"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.bunty.clipsync"
         minSdk = 31
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "3.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
@@ -36,6 +37,12 @@ android {
 
     kotlinOptions {
         jvmTarget = "11"
+        freeCompilerArgs += listOf(
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3Api",
+            "-opt-in=androidx.compose.material3.ExperimentalMaterial3ExpressiveApi",
+            "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
+            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi"
+        )
     }
 
     buildFeatures {
@@ -55,18 +62,20 @@ android {
 
 dependencies {
     // Core Android
+    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
     implementation(libs.material)
     implementation(libs.androidx.ui)
     implementation("androidx.preference:preference-ktx:1.2.1")
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
 
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.10.01"))
-    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material3:material3:1.5.0-alpha19")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
@@ -84,6 +93,7 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore-ktx")
     implementation("com.google.firebase:firebase-storage-ktx")
     implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-crashlytics-ktx")
 
     // ✅ GOOGLE PLAY SERVICES - THIS WAS MISSING!
     implementation("com.google.android.gms:play-services-base:18.3.0")
@@ -92,6 +102,12 @@ dependencies {
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
 
     // QR Code Scanning
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0")
+    implementation("com.google.zxing:core:3.5.2")
+
+    // GSON for lightweight local storage
+    implementation("com.google.code.gson:gson:2.10.1")
+
     implementation("com.google.mlkit:barcode-scanning:17.3.0")
     implementation("androidx.camera:camera-camera2:1.4.0")
     implementation("androidx.camera:camera-lifecycle:1.4.0")

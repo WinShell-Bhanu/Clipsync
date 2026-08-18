@@ -84,8 +84,8 @@ private fun ClipSyncNavBarTab(
     val pillWidth by animateDpAsState(
         targetValue = if (isSelected) 140.dp else 52.dp,
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioMediumBouncy,
-            stiffness = Spring.StiffnessMediumLow
+            dampingRatio = Spring.DampingRatioLowBouncy,
+            stiffness = Spring.StiffnessMedium
         ),
         label = "pill_width"
     )

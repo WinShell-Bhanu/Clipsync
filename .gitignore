@@ -87,3 +87,14 @@ functions/node_modules/
 functions/package-lock.json
 functions/.runtimeconfig.json
 .firebase-hosting-*
+
+# Missing Build Caches
+build_temp/
+mac/local_build/
+mac/local_packages/
+android/app/release/
+
+# Missing IDE/Agent Caches
+.agents/
+android/.gradle_user_home/
+*.log

@@ -57,7 +57,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
      * @param token The new FCM registration token assigned to this app installation.
      */
     override fun onNewToken(token: String) {
-        Log.d(TAG, "New FCM token received")
         serviceScope.launch {
             FCMTokenManager.storeFCMToken(applicationContext, token)
         }
@@ -98,9 +97,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     val downloadUrl = remoteMessage.data["downloadUrl"] ?: ""
                     val releaseNotes = remoteMessage.data["releaseNotes"] ?: "New update available!"
 
-                    // Validate the download URL against the trusted-domain allowlist.
-                    val isTrusted = UrlAllowlistManager.isUrlTrusted(applicationContext, downloadUrl)
-
                     // Persist update details so MainActivity can present a download dialog even
                     // if the user dismissed or never saw the notification.
                     UpdateNotificationManager.savePendingUpdate(
@@ -111,13 +107,11 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     )
 
                     // Post an immediate status-bar notification so the user is informed right away.
-                    // If the URL is untrusted, the notification will include a warning.
                     UpdateNotificationManager.showUpdateNotification(
                         applicationContext,
                         version,
                         releaseNotes,
-                        downloadUrl,
-                        isTrusted
+                        downloadUrl
                     )
                 }
 
@@ -128,9 +122,6 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                     val actionLabel = remoteMessage.data["actionLabel"] ?: "Open"
                     val actionUrl   = remoteMessage.data["actionUrl"]   ?: ""
 
-                    // Validate the action URL against the trusted-domain allowlist.
-                    val isTrusted = UrlAllowlistManager.isUrlTrusted(applicationContext, actionUrl)
-
                     // Guard against an empty body to prevent a content-free notification appearing
                     // in the shade, which would confuse or annoy the user.
                     if (body.isNotEmpty()) {
@@ -139,9 +130,33 @@ class MyFirebaseMessagingService : FirebaseMessagingService() {
                             title,
                             body,
                             actionLabel,
-                            actionUrl,
-                            isTrusted
+                            actionUrl
                         )
+                    }
+                }
+
+                "wake_up" -> {
+                    if (!DeviceManager.isSyncFromMacEnabled(applicationContext)) {
+                        return
+                    }
+                    // Fetch latest from Firestore and copy it via ClipboardGhostActivity
+                    FirestoreManager.fetchLatestClipboard(applicationContext) { decryptedContent ->
+                        // Dispatch to GhostActivity to copy to local clipboard
+                        val intent = Intent(applicationContext, ClipboardGhostActivity::class.java).apply {
+                            action = ClipboardGhostActivity.ACTION_WRITE
+                            putExtra(ClipboardGhostActivity.EXTRA_CLIP_TEXT, decryptedContent)
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                        }
+                        applicationContext.startActivity(intent)
+                        
+                        // Show notification if it's OTP
+                        val isOtp = HelperUtils.isOTP(decryptedContent)
+                        if (isOtp) {
+                            NotificationHelper(applicationContext).showClipboardNotification(decryptedContent, isOtp)
+                        }
+
+                        // Try to re-establish BLE connection since we just got a wake up
+                        LocalSyncManager.startDiscovery(applicationContext)
                     }
                 }
 

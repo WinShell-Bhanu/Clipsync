@@ -40,6 +40,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.graphics.graphicsLayer
 import com.airbnb.lottie.compose.*
+import androidx.compose.runtime.saveable.rememberSaveable
 
 /**
  * Confirmation screen displayed immediately after a successful QR-scan pairing with a Mac.
@@ -86,17 +87,17 @@ fun ConnectionPage(
     // The complete heading string that will be typed out one character at a time.
     val fullText = "You're Connected"
     // Starts empty and grows one character every 15 ms inside the LaunchedEffect below.
-    var displayedText by remember { mutableStateOf("") }
+    var displayedText by rememberSaveable { mutableStateOf("") }
 
     // When true, triggers the combined fade + scale-out that plays before navigating away.
-    var isExiting by remember { mutableStateOf(false) }
+    var isExiting by rememberSaveable { mutableStateOf(false) }
     // Drives the spring-bounce press animation on the continue button.
     val buttonScale = remember { Animatable(1f) }
     val scope = rememberCoroutineScope()
 
     // Gates for the staggered entrance of secondary UI elements.
-    var showSubtitle by remember { mutableStateOf(false) }
-    var isPlayingLottie by remember { mutableStateOf(false) }
+    var showSubtitle by rememberSaveable { mutableStateOf(false) }
+    var isPlayingLottie by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(100)
@@ -105,16 +106,19 @@ fun ConnectionPage(
             displayedText = fullText.substring(0, index + 1)
             delay(15)
         }
-        delay(100)
+        delay(40)
         showSubtitle = true   // fade-in the paired device name once the title is fully typed
-        delay(100)
+        delay(40)
         isPlayingLottie = true // begin the Lottie sync loop after the subtitle appears
 
         // Register the FCM token in the background so push notifications work immediately.
         // M7 fix: use the composable's coroutineScope (tied to the screen lifecycle)
         // instead of GlobalScope to avoid leaking the coroutine if the user navigates away.
-        scope.launch(kotlinx.coroutines.Dispatchers.IO) {
-            FCMTokenManager.registerFCMToken(context)
+        if (DeviceManager.getSyncMode(context) == "hybrid") {
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                FCMTokenManager.registerFCMToken(context)
+                FirestoreManager.updateStatusToActive(context)
+            }
         }
     }
 
@@ -123,8 +127,8 @@ fun ConnectionPage(
         // a single coordinated fade + scale-out before the navigation callback fires.
         AnimatedVisibility(
             visible = !isExiting,
-            exit = fadeOut(animationSpec = tween(300)) +
-                    scaleOut(targetScale = 0.9f, animationSpec = tween(300))
+            exit = fadeOut(animationSpec = tween(150)) +
+                    scaleOut(targetScale = 0.95f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessMediumLow))
         ) {
             Box(
                 modifier = Modifier.fillMaxSize()
@@ -167,8 +171,8 @@ fun ConnectionPage(
                     // from the white heading above it.
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showSubtitle,
-                        enter = androidx.compose.animation.fadeIn(tween(500)) +
-                                androidx.compose.animation.scaleIn(initialScale = 0.9f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy)),
+                        enter = androidx.compose.animation.fadeIn(tween(200)) +
+                                androidx.compose.animation.scaleIn(initialScale = 0.95f, animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMediumLow)),
                         modifier = Modifier
                             .align(Alignment.TopCenter)
                             .offset(y = 110.dp)
@@ -200,7 +204,7 @@ fun ConnectionPage(
                     // Provides a dynamic visual cue that the devices are actively synchronised.
                     androidx.compose.animation.AnimatedVisibility(
                         visible = isPlayingLottie,
-                        enter = androidx.compose.animation.fadeIn(tween(500)),
+                        enter = androidx.compose.animation.fadeIn(tween(300)),
                         modifier = Modifier
                             .align(Alignment.Center)
                             .offset(y = 80.dp)
@@ -231,15 +235,15 @@ fun ConnectionPage(
                     onClick = {
                         scope.launch {
                             // Phase 1: squish down to give tactile press feedback.
-                            buttonScale.animateTo(0.8f, animationSpec = tween(100))
+                            buttonScale.animateTo(0.97f, animationSpec = spring(dampingRatio = Spring.DampingRatioNoBouncy, stiffness = Spring.StiffnessHigh))
                             // Phase 2: spring back up with a satisfying bounce.
                             buttonScale.animateTo(
                                 1f,
-                                animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy)
+                                animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessMedium)
                             )
-                            delay(100)
+                            delay(50)
                             isExiting = true   // phase 3: kick off the full-screen exit animation
-                            delay(300)         // wait for the 300 ms tween to complete
+                            delay(150)         // wait for the 150 ms tween to complete
                             onContinue()       // navigate to PermissionPage
                         }
                     },

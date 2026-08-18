@@ -1,100 +1,147 @@
-<div>
-  <img src="mac/ClipSync/Assets.xcassets/AppIcon.appiconset/Readme-logo.png" alt="Clipsync logo" align="left" />
-  <a href="https://www.buymeacoffee.com/clipsync" align="right">
-    <img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200" align="right" style="margin-top: 90px; margin-right: 80px;" />
-  </a>
-  <br clear="both"/>
-</div>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/banner-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="assets/title-light.svg">
+    <img src="assets/banner-dark.svg" width="372" alt="ClipSync"/>
+  </picture>
+</p>
 
-# ClipSync: Seamless Universal Clipboard
+<br/>
 
-**ClipSync** is the ultimate tool to synchronize your clipboard across Android and Mac—**instantly** and **securely**. Copy on your Mac, paste on your Android. It's that simple.
+<h3 align="center">
+  ClipSync is the ultimate way to sync your clipboard and transfer files between Android and Mac—instantly and securely. Copy on your Mac, paste on your Android, and transfer full files at blazing-fast speeds. Simple, seamless, and effortless.
+</h3>
 
-> **Open Source, Secure, and Blazing Fast.**
+<br/>
+
+<p align="center">
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/Clipsync.Release.zip"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
+  &nbsp;&nbsp;
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/app-release.apk"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/WinShell-Bhanu/CLipSync/releases/latest"><img src="https://img.shields.io/github/v/release/WinShell-Bhanu/ClipSync?style=for-the-badge&labelColor=1c1c1e&color=0A84FF&logo=github&logoColor=white" alt="Latest Release"/></a>
+  &nbsp;
+  <a href="https://github.com/WinShell-Bhanu/ClipSync/releases"><img src="https://img.shields.io/github/downloads/WinShell-Bhanu/ClipSync/total?style=for-the-badge&labelColor=1c1c1e&color=3a3a3c" alt="Downloads"/></a>
+  &nbsp;
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-3a3a3c?style=for-the-badge&labelColor=1c1c1e" alt="License: MIT"/></a>
+  &nbsp;
+  <a href="https://www.buymeacoffee.com/clipsync"><img src="https://img.shields.io/badge/buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"/></a>
+  &nbsp;
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/stargazers"><img src="https://img.shields.io/github/stars/WinShell-Bhanu/Clipsync?style=for-the-badge&label=Stars&labelColor=1c1c1e&color=1c1c1e&logo=github&logoColor=white" alt="Stars"/></a>
+</p>
+
+<br/><br/><br/>
+
+<h1 align="center">Screenshots</h1>
+
+<p align="center">
+  <img src="assets/landingscreen.png" width="242" alt="Landing Screen"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/blescreen.png" width="242" alt="Home Screen"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/homescreen.png" width="242" alt="BLE Screen"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/mac.png" width="500" alt="BLE Screen"/>
+</p>
+
+
+## Features
+
+-  **Instant Sync** — Your clipboard is synchronized across Android and Mac the moment you hit copy. No matter if it's text, links, or images, it's instantly available on your other device without any manual intervention.
+  ```bash
+   Tap Copy on Android -----> Just press Cmd+V on Mac
+   ```
+
+-  **Fast File Transfer** — Send files of any size quickly and securely between your devices. Whether it's a quick document or gigabytes of media, ClipSync handles it with unmatched reliability.
+  
+  <p align="center">
+  <img src="assets/file%20transfer.png" alt="File-Transfer"/>
+</p>
+
+-  **Ultra-Fast Transfer Mode** — Experience blazing-fast transfer speeds that match or even beat AirDrop. We utilize optimized network protocols to ensure you never have to wait for large file transfers again.The only downside is that , its works by removing the encryption of the transfer so its highly recommended to use on Private or Home Networks.
+  <p align="center">
+  <img src="assets/uft.png" alt="Ultra-Fast Transfer"/>
+</p>
+
+-  **Cloud & Local Modes** — Choose between cloud sync for anywhere access or local network mode for maximum speed. Local mode ensures your data never leaves your home network, giving you absolute privacy and peace of mind.
+    <p align="center">
+    <img src="assets/syncmode.png" width=300 alt="Ultra-Fast Transfer"/>
+</p>
+
+-  **OTP Syncs** — Securely and instantly sync One-Time Passwords (OTPs) directly between your devices. You'll never have to manually retype a verification code from your phone to your Mac again.
+   <p align="center">
+   <img src="assets/otp.png" width=200 alt="OTP Syncs"/>
+</p>
+
+-  **Frictionless** — Designed to be completely seamless and stay out of your way. Just copy on one device and paste on the other, just like it's the exact same machine.
+
+## Installation
+
+### macOS
+Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for macOS" button to grab `Clipsync.Release.zip`.
+
+**Installation steps:**
+1. Unzip the downloaded folder.
+2. Inside the folder, double-click on `Install ClipSync.command`.
+3. If macOS blocks the script with an "unidentified developer" warning, open **System Settings** ➔ **Privacy and Security**, scroll down, and click **"Open anyway"**.
+4. The script will securely install ClipSync into your Applications folder and retain your pairing data.
+
+To enable the ClipSync share extension ➔ Open **System Settings** ➔ **Privacy & Security** ➔ **Extensions** ➔ **Sharing**, and check the box for ClipSync.
+
+### Android
+Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for Android" button to grab the `app-release.apk` and install it.
+
+> [!WARNING]
+> **Accessibility Permission Blocked?**
+> Android may block the accessibility permission required by the app. If you try to grant the permission and it's blocked, follow these steps:
+> 1. Close the app (but don't swipe it away from memory).
+> 2. Long-press the ClipSync app icon and tap **App Info**.
+> 3. Tap the **3 dots** in the top right corner and select **"Allow restricted settings"**.
+> 4. Enter your PIN or use your fingerprint to authenticate.
+> 5. Go back to the ClipSync app, and you will now be able to grant the accessibility permission.
 
 ---
 
-## 🚀 Features
+## Local Build
 
-- **Instant Sync**: Copy text on one device and it’s immediately available on the other. No extra buttons or annoying persistent notifications to click on Android to send the clipboard—just copy anything normally and paste it directly on the Mac OR the other way around.
-- **End-to-End Encryption**: Your data is encrypted with AES-256 (GCM) locally before it leaves your device and decrypted locally on each device before getting copied to the clipboard.
-- **Cross-Platform**: Seamlessly works between **macOS** and **Android**.
-- **Efficient**: Optimized for minimal battery drain and background usage.
-- **Stunning UI**: Beautiful, native designs for both platforms.
+If you prefer to compile ClipSync from source yourself, follow the instructions below.
 
----
+### macOS Build
+1. Clone the repository and navigate to the mac folder:
+   ```bash
+   git clone https://github.com/WinShell-Bhanu/Clipsync
+   cd Clipsync/mac
+   ```
+2. Open `Clipsync.xcodeproj` in Xcode.
+3. In the menu bar, go to **Product ➔ Archive** and wait for it to finish compiling.
+4. After a successful build, go to **Window ➔ Organizer**.
+5. Select the archive, click **Distribute App**, select **Custom**, choose **Copy App**, and save it to a local folder.
+6. Drag the newly built `ClipSync` app into your **Applications** folder.
 
-## 🛠 Tech Stack
+> [!NOTE]
+> Cloud sync will not work out-of-the-box on local builds as it relies on Firebase servers. To get cloud sync working, you must provide your own `google-services.json` / `GoogleService-Info.plist` from Firebase. **Local sync mode will work normally.**
 
-### macOS App
-* **Language**: Swift 5.9
-* **Framework**: SwiftUI & AppKit
-* **Architecture**: MVVM
-* **Dependencies**: Firebase, Lottie
-
-### Android App
-* **Language**: Kotlin
-* **Framework**: Jetpack Compose, Material 3
-* **Architecture**: MVVM / Clean Architecture
-* **Dependencies**: Firebase, Coroutines, Hilt
-
----
-
-## 📦 Getting Started
-
-To keep things organized, this repository contains both client applications.
-
-###   Installation for macOS
-
-Since this app is not signed with a developer ID, follow these steps to install it:
-
-1. Download the ZIP file from the repository.
-2. Extract the ZIP file to a location of your choice.
-3. Double-click the `.command` file included in the extracted folder to start the installation process.
-4. Follow the on-screen instructions to complete the installation.
-
-###   Installation for Android
-
-Since this app is distributed via APK (Sideloading), you need to follow these steps to install and enable the necessary permissions, specifically for Android 13 and newer.
-
-##### 1. Prepare for Installation
-**Disable Play Protect**
-Google Play Protect may block the installation since the app isn't from the Play Store.
-1. Open the **Play Store**.
-2. Tap your **Profile Icon** (top right) → **Play Protect**.
-3. Tap **Settings (⚙️)** (top right).
-4. Turn **OFF** "Scan apps with Play Protect".
-
-##### 2. Enable Accessibility Permission (Critical Step)
-ClipSync uses an Accessibility Service to detect copy events. On **Android 13+**, this setting is "Restricted" for sideloaded apps by default. Here is how to unlock it:
-
-1. Open **ClipSync** and tap the **Accessibility** toggle.
-2. If it is grayed out or shows a "Restricted Setting" popup, click **OK**.
-3. Go to your phone's **Settings** → **Apps** → **ClipSync**.
-4. Tap the **Three Dots (⋮)** in the top-right corner.
-5. Select **Allow restricted settings**. (You may need to verify your fingerprint/PIN).
-6. **Go Back** to the ClipSync app and tap the toggle again.
-7. Find **ClipSync** under "Downloaded Apps" and turn it **ON**.
+### Android Build
+1. Open the `android` folder from the cloned repository in Android Studio.
+2. In the menu bar, go to **Build ➔ Build Bundle(s) / APK(s) ➔ Build APK(s)** to generate the compiled APK.
+3. Once generated, locate the APK and install it on your device.
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-We love contributions!
-1. **Fork** the project.
-2. Create your **Feature Branch**.
-3. **Commit** your changes.
-4. **Push** to the branch.
-5. Open a **Pull Request**.
+As this project is fully free and the server costs are handled personally, any contributions—whether it's code, bug reports, or simply spreading the word—are massively appreciated! It would be awesome if you could help this repo grow by contributing.
 
-### Support the Project
+<a href="https://github.com/WinShell-Bhanu/ClipSync/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=WinShell-Bhanu/CLipSync" />
+</a>
 
-If you find ClipSync useful and want to support its development, consider buying me a coffee!
+<p align="center">
+  <a href="https://www.buymeacoffee.com/clipsync"><img src="https://img.shields.io/badge/buy_me_a_coffee-FFDD00?style=for-the-badge&logo=buy-me-a-coffee&logoColor=black" alt="Buy Me A Coffee"/></a>
+</p>
 
-<a href="https://buymeacoffee.com/clipsync"><img src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" alt="Buy Me A Coffee" width="200"></a>
+## License
 
----
-
-## 📜 License
-
-Distributed under the **MIT License**. See `LICENSE` for more information.
+[MIT](LICENSE)

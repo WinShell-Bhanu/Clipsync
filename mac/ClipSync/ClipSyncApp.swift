@@ -13,6 +13,7 @@ import Combine
 import IOKit.pwr_mgt
 import UserNotifications
 
+
 // MARK: - App Entry Point
 
 @main
@@ -33,13 +34,20 @@ struct ClipSyncApp: App {
             "syncFromMac": true
         ])
 
-
-        _ = FirebaseManager.shared
+        let isLocalOnlyMode = UserDefaults.standard.string(forKey: "sync_mode") == "local"
+        if !isLocalOnlyMode {
+            _ = FirebaseManager.shared
+        }
         PairingManager.shared.restorePairing()
 
         if PairingManager.shared.isPaired {
              ClipboardManager.shared.startMonitoring()
-             ClipboardManager.shared.listenForAndroidClipboard()
+             if !isLocalOnlyMode {
+                 ClipboardManager.shared.listenForAndroidClipboard()
+             }
+             // Start the always-on TCP server and BLE wakeup receiver
+             ClipSyncServer.shared.start()
+             WakeupReceiver.shared.start()
         }
     }
 
@@ -93,84 +101,7 @@ private struct WindowConfigurator: NSViewRepresentable {
     }
 }
 
-// MARK: - Hot-Reload (Debug Only)
 
-#if canImport(HotSwiftUI)
-@_exported import HotSwiftUI
-#elseif canImport(Inject)
-@_exported import Inject
-#else
-#if DEBUG
-import Combine
-
-/// Observes `INJECTION_BUNDLE_NOTIFICATION` so views can force-redraw on hot-reload.
-public class InjectionObserver: ObservableObject {
-    public static let shared = InjectionObserver()
-    @Published var injectionNumber = 0
-    var cancellable: AnyCancellable? = nil
-    let publisher = PassthroughSubject<Void, Never>()
-
-    init() {
-        cancellable = NotificationCenter.default.publisher(for:
-            Notification.Name("INJECTION_BUNDLE_NOTIFICATION"))
-            .sink { [weak self] change in
-            self?.injectionNumber += 1
-            self?.publisher.send()
-        }
-    }
-}
-
-extension SwiftUI.View {
-
-    public func eraseToAnyView() -> some SwiftUI.View {
-        return AnyView(self)
-    }
-
-    public func enableInjection() -> some SwiftUI.View {
-        return eraseToAnyView()
-    }
-
-    public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
-        return self
-            .onReceive(InjectionObserver.shared.publisher, perform: bumpState)
-            .eraseToAnyView()
-    }
-}
-
-@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
-@propertyWrapper
-public struct ObserveInjection: DynamicProperty {
-    @ObservedObject private var iO = InjectionObserver.shared
-
-    public init() {}
-    public private(set) var wrappedValue: Int {
-        get {0} set {}
-    }
-}
-#else
-
-extension SwiftUI.View {
-    @inline(__always)
-    public func eraseToAnyView() -> some SwiftUI.View { return self }
-    @inline(__always)
-    public func enableInjection() -> some SwiftUI.View { return self }
-    @inline(__always)
-    public func onInjection(bumpState: @escaping () -> ()) -> some SwiftUI.View {
-        return self
-    }
-}
-
-@available(iOS 13.0, macOS 10.15, tvOS 13.0, watchOS 6.0, *)
-@propertyWrapper
-public struct ObserveInjection {
-
-    public init() {}
-    public private(set) var wrappedValue: Int {
-        get {0} set {}
-    }
-}
-#endif
-#endif
 
 
 // MARK: - AppDelegate
@@ -185,33 +116,61 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     var popover: NSPopover?
     var cancellables = Set<AnyCancellable>()
     var assertionID: IOPMAssertionID = 0
+    var globalEventMonitor: Any?
 
     // MARK: - Lifecycle
 
     /// Boots FCM, notification permissions, builds the popover, and starts
     /// observing pairing state to show/hide the menu bar icon.
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Process any files shared while the app was closed,
+        // then observe for new shares arriving while running.
+        processPendingBookmarks()
+        setupShareExtensionListener()
+        
+        // Listen for update notifications globally so background checks or pushes can trigger the UI
+        NotificationCenter.default.addObserver(forName: .showUpdateDialog, object: nil, queue: .main) { _ in
+            UpdateWindowController.shared.showWindow()
+        }
+        
+        // Automatically check for updates silently in the background
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            MacUpdateManager.shared.checkForUpdate(manual: false)
+        }
+        
+        let isLocalOnlyMode = UserDefaults.standard.string(forKey: "sync_mode") == "local"
 
-        // Set FCM delegate
-        Messaging.messaging().delegate = self
+        if !isLocalOnlyMode {
+            // Set FCM delegate
+            Messaging.messaging().delegate = self
+        }
         
         UNUserNotificationCenter.current().delegate = self
         
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .badge, .sound]) { granted, error in
-            if granted {
-                print("✅ Notification permission granted")
-            } else {
-                print("❌ Notification permission denied: \(String(describing: error))")
-            }
+            // Handle notification permission result
         }
         
-        NSApplication.shared.registerForRemoteNotifications()
+        if !isLocalOnlyMode {
+            NSApplication.shared.registerForRemoteNotifications()
+        }
 
         let pop = NSPopover()
         pop.contentSize = NSSize(width: 280, height: 400)
         pop.behavior = .transient
-        pop.contentViewController = NSHostingController(rootView: MenuBarView())
+        let hostingController = NSHostingController(rootView: MenuBarView())
+        pop.contentViewController = hostingController
         self.popover = pop
+
+        // Force view load to eliminate first-click lag
+        _ = hostingController.view
+
+        // Listen for clicks outside the app to close the popover
+        globalEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+            if self?.popover?.isShown == true {
+                self?.popover?.performClose(event)
+            }
+        }
 
 
         OTPNotificationManager.shared.delegate = self
@@ -224,13 +183,71 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
                 self?.updateDockPolicy()
 
 
-                if paired {
+                if paired && UserDefaults.standard.string(forKey: "sync_mode") != "local" {
                     OTPNotificationManager.shared.startListening()
                 } else {
                     OTPNotificationManager.shared.stopListening()
                 }
             }
             .store(in: &cancellables)
+            
+        // Observe transfer state to prevent sleep
+        Publishers.CombineLatest(ClipSyncServer.shared.$hasActiveClient, ClipSyncServer.shared.$isSendingFile)
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hasClient, isSending in
+                if hasClient || isSending {
+                    self?.preventAppSleep()
+                } else {
+                    self?.allowAppSleep()
+                }
+            }
+            .store(in: &cancellables)
+    }
+
+    /// Observes the Darwin notification posted by ClipSyncShare extension.
+    /// UserDefaults.didChangeNotification is in-process only and NEVER fires
+    /// when a separate process (the extension) writes to shared defaults.
+    /// Darwin notifications (CFNotificationCenter) cross process boundaries.
+    private func setupShareExtensionListener() {
+        let center = CFNotificationCenterGetDarwinNotifyCenter()
+        let observer = Unmanaged.passUnretained(self).toOpaque()
+        CFNotificationCenterAddObserver(
+            center,
+            observer,
+            { _, observer, _, _, _ in
+                guard let observer else { return }
+                let delegate = Unmanaged<AppDelegate>.fromOpaque(observer).takeUnretainedValue()
+                DispatchQueue.main.async { delegate.processPendingBookmarks() }
+            },
+            "com.OP.ClipSync.share.pendingFiles" as CFString,
+            nil,
+            .deliverImmediately
+        )
+    }
+
+    /// Resolves any pending bookmark Data objects from the shared App Group
+    /// into security-scoped URLs and kicks off a file send.
+    func processPendingBookmarks() {
+        let urls = SecurityScopedResourceManager.resolveAndConsume()
+        guard !urls.isEmpty else { return }
+
+        ClipSyncServer.shared.sendFiles(urls: urls)
+
+        // Stop security-scoped access once the server has handed off the URLs.
+        // ClipSyncServer reads the file synchronously during sendFiles setup,
+        // so we can release access after a short delay.
+        DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
+            SecurityScopedResourceManager.stopAccessing(urls)
+        }
+
+        // Show popover so user sees transfer progress
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            if !(self.popover?.isShown ?? false), let button = self.statusItem?.button {
+                self.popover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+                NSApp.activate(ignoringOtherApps: true)
+            }
+        }
     }
 
 
@@ -249,13 +266,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 
              if NSApp.activationPolicy() != .accessory {
                  NSApp.setActivationPolicy(.accessory)
-                 print("Dock Policy: ACCESSORY (Paired)")
              }
         } else {
 
             if NSApp.activationPolicy() != .regular {
                 NSApp.setActivationPolicy(.regular)
-                print("Dock Policy: REGULAR (Unpaired)")
             }
 
 
@@ -308,6 +323,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 
     /// Uses IOPMAssertion to prevent the system from idle-sleeping while ClipSync is monitoring.
     func preventAppSleep() {
+        if assertionID != 0 { return } // Already preventing sleep
+        
         let reason = "ClipSync needs to monitor clipboard" as CFString
         let success = IOPMAssertionCreateWithName(
             kIOPMAssertionTypePreventUserIdleSystemSleep as CFString,
@@ -320,6 +337,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
 
         } else {
 
+        }
+    }
+
+    func allowAppSleep() {
+        if assertionID != 0 {
+            IOPMAssertionRelease(assertionID)
+            assertionID = 0
         }
     }
 
@@ -341,8 +365,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     /// Receives the refreshed FCM token and stores it in Firestore.
     /// C3 fix: removed all_devices topic subscription — it's a phishing vector.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
+        guard UserDefaults.standard.string(forKey: "sync_mode") != "local" else {
+            return
+        }
         guard let token = fcmToken else { return }
-        print("✅ FCM Token received")
         
         // Store token in Firestore
         Task {
@@ -353,13 +379,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     /// Hands the APNs device token to Firebase so it can map it to the FCM token.
     /// M8 fix: no longer logs the raw APNs token hex in cleartext.
     func application(_ application: NSApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
+        guard UserDefaults.standard.string(forKey: "sync_mode") != "local" else { return }
         Messaging.messaging().apnsToken = deviceToken
     }
 
     func application(_ application: NSApplication, didFailToRegisterForRemoteNotificationsWithError error: Error) {
-        print("❌ APNs registration failed: \(error.localizedDescription)")
+        // Handle failure silently in production
     }
     
+    /// Handles incoming push notifications while the app is running.
+    func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String : Any]) {
+        if let type = userInfo["type"] as? String, type == "wake_up" {
+            // Fetch latest clipboard immediately
+            ClipboardManager.shared.pullClipboard()
+        }
+    }
     
     // MARK: - UNUserNotificationCenterDelegate
 
@@ -382,18 +416,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, MessagingDelegate, UNUserNot
     ) {
         let userInfo = response.notification.request.content.userInfo
         
-        if let type = userInfo["type"] as? String, type == "update" {
-            let version = userInfo["version"] as? String ?? "Unknown"
-            let downloadUrl = userInfo["downloadUrl"] as? String ?? ""
-            let releaseNotes = userInfo["releaseNotes"] as? String ?? "New update available!"
-            
-            UpdateNotificationManager.shared.savePendingUpdate(
-                version: version,
-                downloadUrl: downloadUrl,
-                releaseNotes: releaseNotes
-            )
-            
-            NotificationCenter.default.post(name: .showUpdateDialog, object: nil)
+        if let type = userInfo["type"] as? String {
+            if type == "update" {
+                let version = userInfo["version"] as? String ?? "Unknown"
+                let downloadUrl = userInfo["downloadUrl"] as? String ?? ""
+                let releaseNotes = userInfo["releaseNotes"] as? String ?? "New update available!"
+                
+                UpdateNotificationManager.shared.savePendingUpdate(
+                    version: version,
+                    downloadUrl: downloadUrl,
+                    releaseNotes: releaseNotes
+                )
+                
+                NotificationCenter.default.post(name: .showUpdateDialog, object: nil)
+            } else if type == "file" {
+                if let path = userInfo["path"] as? String {
+                    let url = URL(fileURLWithPath: path)
+                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+                }
+            }
         }
         
         completionHandler()

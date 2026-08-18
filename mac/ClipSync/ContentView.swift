@@ -1,41 +1,31 @@
 
-
-
 // ContentView.swift
-// Root routing view. Directs to LandingScreen (unpaired), ConnectedScreen (paired +
-// setup incomplete), or HomeScreen (fully set up). Shows a SplashScreen overlay for
-// 4 seconds on first launch while pairing has not yet occurred.
+// Root routing view. Directs to LandingScreen (unpaired/onboarding) or NewHomeScreen (fully set up).
 
 import SwiftUI
 
 // MARK: - ContentView
 
 struct ContentView: View {
-    @StateObject private var pairingManager = PairingManager.shared
-
+    @ObservedObject private var pairingManager = PairingManager.shared
     @State private var showSplash = !PairingManager.shared.isPaired
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
         ZStack {
-
-            if pairingManager.isPaired {
-                if pairingManager.isSetupComplete {
-                    NavigationStack {
-                        HomeScreen()
-                    }
-                } else {
-                    NavigationStack {
-                        ConnectedScreen()
-                    }
+            // Only switch to the home dashboard once BOTH pairing AND onboarding
+            // setup are complete. While isPaired is true but isSetupComplete is false
+            // the user is mid-onboarding (WiFiConnect → ConnectedScreen → FinalScreen)
+            // and must not be yanked to NewHomeScreen prematurely.
+            if pairingManager.isPaired && pairingManager.isSetupComplete {
+                NavigationStack {
+                    NewHomeScreen()
                 }
             } else {
                 LandingScreen(isBackgroundPaused: showSplash)
             }
-
 
             if showSplash {
                 SplashScreen()
@@ -43,7 +33,7 @@ struct ContentView: View {
                     .zIndex(1)
                     .onAppear {
                         DispatchQueue.main.asyncAfter(deadline: .now() + 4.0) {
-                            withAnimation(.easeOut(duration: 0.8)) {
+                            withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
                                 showSplash = false
                             }
                         }
@@ -51,11 +41,10 @@ struct ContentView: View {
             }
         }
         .ignoresSafeArea()
-        .enableInjection()
     }
 }
+
 
 #Preview {
     ContentView()
 }
-

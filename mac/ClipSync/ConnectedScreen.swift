@@ -24,13 +24,12 @@ struct ConnectedScreen: View {
     @State private var buttonOffset: CGFloat = 20
 
     #if DEBUG
-    @ObserveInjection var forceRedraw
     #endif
 
     var body: some View {
         ZStack {
 
-            MeshBackground()
+            MeshBackground(shouldAnimate: false)
                 .ignoresSafeArea()
 
 
@@ -82,6 +81,7 @@ struct ConnectedScreen: View {
         .frame(width: 590, height: 590)
         .ignoresSafeArea()
         .onAppear {
+            pairingManagerr.updateStatusToActive()
             ClipboardManager.shared.startMonitoring()
             ClipboardManager.shared.listenForAndroidClipboard()
             playEntranceAnimations()
@@ -89,32 +89,31 @@ struct ConnectedScreen: View {
         .navigationDestination(isPresented: $navigateToFinal) {
             FinalScreen()
         }
-        .enableInjection()
     }
 
 
     /// Staggers spring animations for the title, subtitle, Lottie animation, and CTA button.
     private func playEntranceAnimations() {
 
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.8)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0)) {
             titleOpacity = 1
             titleOffset = 0
         }
 
 
-        withAnimation(.spring(response: 0.6, dampingFraction: 0.8).delay(0.1)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.1)) {
             subtitleOpacity = 1
             subtitleOffset = 0
         }
 
 
-        withAnimation(.spring(response: 0.7, dampingFraction: 0.7).delay(0.2)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.2)) {
             lottieOpacity = 1
             lottieScale = 1.0
         }
 
 
-        withAnimation(.spring(response: 0.5, dampingFraction: 0.7).delay(0.3)) {
+        withAnimation(.spring(response: 0.4, dampingFraction: 1.0).delay(0.3)) {
             buttonOpacity = 1
             buttonOffset = 0
         }
@@ -163,4 +162,3 @@ struct ConnectLottieView: NSViewRepresentable {
     ConnectedScreen()
         .frame(width: 590, height: 590)
 }
-

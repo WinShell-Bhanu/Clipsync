@@ -11,6 +11,7 @@ import AppKit
 import FirebaseFirestore
 import Combine
 import CryptoKit
+import UniformTypeIdentifiers
 
 // MARK: - ClipboardManager
 
@@ -34,13 +35,17 @@ class ClipboardManager: ObservableObject {
     private var timer: DispatchSourceTimer?
     private var watchdogTimer: Timer?
     private var lastChangeCount = 0
-    private var lastCopiedText: String = ""
-    private var ignoreNextChange = false
-    private let db = FirebaseManager.shared.db
+    var lastCopiedText: String = ""
+    var ignoreNextChange = false
+    private var db: Firestore { FirebaseManager.shared.db }
     private var clipboardListener: ListenerRegistration?
 
-    private var sharedSecretHex: String {
-        return KeychainHelper.getEncryptionKey() ?? Secrets.fallbackEncryptionKey
+    private var isLocalOnlyMode: Bool {
+        UserDefaults.standard.string(forKey: "sync_mode") == "local"
+    }
+
+    private var sharedSecretHex: String? {
+        return KeychainHelper.getEncryptionKey()
     }
 
     private var isListenerActive = false
@@ -77,13 +82,16 @@ class ClipboardManager: ObservableObject {
             stopListening()
         } else {
             startMonitoring()
-            listenForAndroidClipboard()
+            if !isLocalOnlyMode {
+                listenForAndroidClipboard()
+            }
         }
     }
 
 
     /// Re-attaches the Firestore listener to immediately fetch the latest Android clipboard.
     func pullClipboard() {
+        guard !isLocalOnlyMode else { return }
         stopListening()
         listenForAndroidClipboard()
     }
@@ -113,25 +121,70 @@ class ClipboardManager: ObservableObject {
             return
         }
 
-        guard let text = pasteboard.string(forType: .string), !text.isEmpty else {
+        var finalPayload = ""
+        var historyText = ""
+
+        if let image = NSImage(pasteboard: pasteboard),
+           let payload = jpegPayload(from: image) {
+            // Path 1: actual image DATA on the pasteboard (Preview-style copy)
+            finalPayload = payload
+            historyText = "[Image]"
+
+        } else if pasteboard.types?.contains(.fileURL) == true,
+                  let fileURL = pasteboard.readObjects(forClasses: [NSURL.self], options: nil)?.first as? URL,
+                  isImageFile(fileURL),
+                  let image = NSImage(contentsOf: fileURL),
+                  let payload = jpegPayload(from: image) {
+            // Path 2: a FILE reference, but it's an image file — 
+            // load its actual bytes from disk and treat it the same as Path 1
+            finalPayload = payload
+            historyText = "[Image]"
+
+        } else if pasteboard.types?.contains(.fileURL) == true {
+            // Genuinely a non-image file (PDF, folder, document, etc.) — 
+            // not handled by clipboard sync, skip as before
+            return
+
+        } else if let text = pasteboard.string(forType: .string), !text.isEmpty {
+            finalPayload = text
+            historyText = text
+
+        } else {
             return
         }
 
-        guard text != lastCopiedText else { return }
-        lastCopiedText = text
+        // Use a hash for lastCopiedText if it's an image to avoid holding MBs in memory
+        let payloadIdentifier = historyText == "[Image]" ? "[IMAGE_PAYLOAD]:\(finalPayload.count)" : finalPayload
+        guard payloadIdentifier != lastCopiedText else { return }
+        lastCopiedText = payloadIdentifier
 
         guard syncFromMac else { return }
 
-        uploadClipboard(text: text)
+        if isLocalOnlyMode {
+            // In local-only mode there is no Firebase fallback, but sendTextToAndroid now
+            // handles the TCP fallback internally for large payloads — so we simply forward
+            // the completion result for logging purposes.
+            ClipSyncServer.shared.sendTextToAndroid(finalPayload) { success in
+                if !success {
+                }
+            }
+        } else {
+            ClipSyncServer.shared.sendTextToAndroid(finalPayload) { [weak self] success in
+                guard let self = self else { return }
+                if !success {
+                    self.uploadClipboard(text: finalPayload)
+                }
+            }
+        }
 
         DispatchQueue.main.async { [weak self] in
             guard let self = self else { return }
-            if let lastItem = self.history.first, lastItem.content == text {
+            if let lastItem = self.history.first, lastItem.content == historyText {
                 return
             }
 
             let newItem = ClipboardItem(
-                content: text,
+                content: historyText,
                 timestamp: Date(),
                 deviceName: "Mac",
                 direction: .sent
@@ -141,11 +194,33 @@ class ClipboardManager: ObservableObject {
         }
     }
 
+    /// Shared conversion so both the pasteboard-image and file-image paths
+    /// produce an identical payload format.
+    private func jpegPayload(from image: NSImage) -> String? {
+        guard let tiffData = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiffData),
+              let jpegData = bitmap.representation(using: .jpeg, properties: [.compressionFactor: 0.7]) else {
+            return nil
+        }
+        return "[IMAGE_PAYLOAD]:" + jpegData.base64EncodedString()
+    }
+
+    /// Cheap UTI-based check — doesn't need to open the file, just checks its declared type.
+    private func isImageFile(_ url: URL) -> Bool {
+        guard let type = try? url.resourceValues(forKeys: [.contentTypeKey]).contentType else {
+            return false
+        }
+        return type.conforms(to: .image)
+    }
+
 
     // MARK: - Firebase Sync
 
     /// Encrypts the given text with AES-GCM and writes it to the `clipboardItems` collection.
     private func uploadClipboard(text: String) {
+        guard !isLocalOnlyMode else {
+            return
+        }
         guard let pairingId = PairingManager.shared.pairingId else { return }
         let macDeviceId = DeviceManager.shared.getDeviceId()
 
@@ -160,8 +235,7 @@ class ClipboardManager: ObservableObject {
         ]
 
         db.collection("clipboardItems").addDocument(data: clipboardData) { error in
-            if let error = error {
-                print("Error uploading clipboard: \(error)")
+            if error != nil {
             }
         }
     }
@@ -170,6 +244,10 @@ class ClipboardManager: ObservableObject {
     /// Attaches a Firestore snapshot listener for the most recent clipboard item from Android.
     /// Retries up to 5 times if pairingId is not yet available.
     func listenForAndroidClipboard(retryCount: Int = 0) {
+        guard !isLocalOnlyMode else {
+            stopListening()
+            return
+        }
         guard let pairingId = PairingManager.shared.pairingId else {
             if retryCount < 5 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
@@ -210,7 +288,6 @@ class ClipboardManager: ObservableObject {
                       sourceDeviceId != macDeviceId else { return }
 
                 guard let content = self.decrypt(encryptedContent) else {
-                    print("ClipboardManager: Decryption failed — skipping incoming clipboard item")
                     return
                 }
 
@@ -243,6 +320,7 @@ class ClipboardManager: ObservableObject {
     /// Schedules a repeating timer that restarts the Firestore listener if no update
     /// has been received in more than 60 seconds, guarding against silent disconnects.
     private func startListenerWatchdog() {
+        guard !isLocalOnlyMode else { return }
         watchdogTimer?.invalidate()
 
         watchdogTimer = Timer.scheduledTimer(withTimeInterval: 30.0, repeats: true) { [weak self] timer in
@@ -280,7 +358,8 @@ class ClipboardManager: ObservableObject {
         guard let data = string.data(using: .utf8) else { return nil }
 
         do {
-            let keyData = hexToData(hex: sharedSecretHex)
+            guard let secretHex = sharedSecretHex else { return nil }
+            let keyData = hexToData(hex: secretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.seal(data, using: key)
             return sealedBox.combined?.base64EncodedString()
@@ -295,7 +374,8 @@ class ClipboardManager: ObservableObject {
         guard let data = Data(base64Encoded: base64String) else { return nil }
 
         do {
-            let keyData = hexToData(hex: sharedSecretHex)
+            guard let secretHex = sharedSecretHex else { return nil }
+            let keyData = hexToData(hex: secretHex)
             let key = SymmetricKey(data: keyData)
             let sealedBox = try AES.GCM.SealedBox(combined: data)
             let decryptedData = try AES.GCM.open(sealedBox, using: key)
@@ -321,5 +401,3 @@ class ClipboardManager: ObservableObject {
         return data
     }
 }
-
-

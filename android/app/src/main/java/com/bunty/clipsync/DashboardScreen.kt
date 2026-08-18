@@ -76,8 +76,6 @@ fun DashboardScreen(
         viewModel.updatePermissionsState(
             isAccessibilityEnabled      = checkServiceStatus(context, ClipboardAccessibilityService::class.java),
             isBatteryUnrestricted       = pm.isIgnoringBatteryOptimizations(context.packageName),
-            isSmsPermissionGranted      = ContextCompat.checkSelfPermission(context, Manifest.permission.RECEIVE_SMS) == PackageManager.PERMISSION_GRANTED &&
-                                          ContextCompat.checkSelfPermission(context, Manifest.permission.READ_SMS)    == PackageManager.PERMISSION_GRANTED,
             isNotificationListenerEnabled = isNotificationServiceEnabled(context)
         )
     }
@@ -207,7 +205,6 @@ fun DashboardScreen(
                     // Permission warning banner (shown only when something is off)
                     if (!state.isAccessibilityEnabled ||
                         !state.isBatteryUnrestricted  ||
-                        !state.isSmsPermissionGranted ||
                         !state.isNotificationListenerEnabled
                     ) {
                         Row(

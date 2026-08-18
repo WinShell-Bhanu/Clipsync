@@ -45,10 +45,12 @@ struct ClipSyncApp: App {
              if !isLocalOnlyMode {
                  ClipboardManager.shared.listenForAndroidClipboard()
              }
-             // Start the always-on TCP server and BLE wakeup receiver
+             // Start the always-on TCP server
              ClipSyncServer.shared.start()
-             WakeupReceiver.shared.start()
         }
+        // Always start BLE wakeup receiver — even unpaired, Android must be able
+        // to find and connect to this GATT service during first-time pairing.
+        WakeupReceiver.shared.start()
     }
 
     var body: some Scene {

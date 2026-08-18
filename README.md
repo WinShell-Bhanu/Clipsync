@@ -15,9 +15,9 @@
 <br/>
 
 <p align="center">
-  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/ClipSync.v3.0.0.zip"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/WinShell-Bhanu/ClipSync/releases/latest"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/app-release.apk"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
 </p>
 
 <p align="center">

@@ -15,9 +15,9 @@
 <br/>
 
 <p align="center">
-  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/Clipsync.Release.zip"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/app-release.apk"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/ClipSync/releases/latest"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
 </p>
 
 <p align="center">
@@ -80,7 +80,7 @@
 ## Installation
 
 ### macOS
-Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for macOS" button to grab `Clipsync.Release.zip`.
+Head to the [Releases tab](https://github.com/WinShell-Bhanu/Clipsync/releases/latest) or click the "Download for macOS" button to grab the `ClipSync.vX.X.X.zip` release file.
 
 **Installation steps:**
 1. Unzip the downloaded folder.

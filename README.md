@@ -15,9 +15,11 @@
 <br/>
 
 <p align="center">
-  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/ClipSync.v3.0.0.zip"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/CLip"><img src="assets/download(macos).svg" alt="Download for macOS" height="58"/></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/WinShell-Bhanu/Clipsync/releases/latest/download/app-release.apk"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
+  <a href="https://github.com/WinShell-Bhanu/ClipSync/releases/latest"><img src="assets/download(android).svg" alt="Download for Android" height="58"/></a>
+  &nbsp;&nbsp;
+  <a href=""><img src="assets/orion-badge.png" alt="Download for Android" height="58"/></a>
 </p>
 
 <p align="center">
@@ -67,7 +69,7 @@
 
 -  **Cloud & Local Modes** — Choose between cloud sync for anywhere access or local network mode for maximum speed. Local mode ensures your data never leaves your home network, giving you absolute privacy and peace of mind.
     <p align="center">
-    <img src="assets/syncmode.png" width=300 alt="Ultra-Fast Transfer"/>
+    <img src="assets/syncmodemac.png" width=300 alt="Ultra-Fast Transfer"/>
 </p>
 
 -  **OTP Syncs** — Securely and instantly sync One-Time Passwords (OTPs) directly between your devices. You'll never have to manually retype a verification code from your phone to your Mac again.

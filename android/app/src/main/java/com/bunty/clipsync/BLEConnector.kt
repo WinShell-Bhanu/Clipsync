@@ -55,6 +55,8 @@ object BLEConnector {
     private var pendingDeviceName: String? = null
     /** Application context stored so [succeed] can save the Mac BLE address. */
     private var appContext: android.content.Context? = null
+    /** MIUI/Xiaomi GATT workaround: service list can be empty on first discovery, retry once. */
+    private var serviceDiscoveryRetries = 0
 
     /**
      * Connect to the device at [address] and read the DeviceName GATT characteristic.
@@ -66,17 +68,25 @@ object BLEConnector {
         _state.value = ConnectionState.Connecting
         startTimeout()
 
+        // Wait for the BT stack to fully release the previous GATT session opened
+        // by BLEScanner.fetchNameOverGatt(). On Xiaomi/HyperOS (and some Samsung)
+        // stacks, gatt.close() is async — opening a new GATT connection immediately
+        // after causes discoverServices() to return an empty list ("service not found").
+        // 700ms is enough for even the slowest MIUI BT stacks to fully tear down.
+        scope.launch {
+            delay(700)
+
         val bluetoothManager = context.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
         val adapter = bluetoothManager?.adapter ?: run {
             fail("Bluetooth not available")
-            return
+            return@launch
         }
 
         val device = try {
             adapter.getRemoteDevice(address)
         } catch (e: IllegalArgumentException) {
             fail("Invalid device address")
-            return
+            return@launch
         }
 
         val callback = object : BluetoothGattCallback() {
@@ -100,6 +110,17 @@ object BLEConnector {
 
                 val service = gatt.getService(BLEScanner.SERVICE_UUID)
                 if (service == null) {
+                    // MIUI / Xiaomi BLE stack bug: onServicesDiscovered fires with
+                    // GATT_SUCCESS but an empty service list. Retry once after a short
+                    // delay to give the GATT cache time to populate.
+                    if (serviceDiscoveryRetries < 1) {
+                        serviceDiscoveryRetries++
+                        scope.launch {
+                            delay(600)
+                            gatt.discoverServices()
+                        }
+                        return
+                    }
                     fail("ClipSync service not found on this device")
                     return
                 }
@@ -174,11 +195,12 @@ object BLEConnector {
         }
 
         gatt = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
-        } else {
-            @Suppress("DEPRECATION")
-            device.connectGatt(context, false, callback)
-        }
+                device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+            } else {
+                @Suppress("DEPRECATION")
+                device.connectGatt(context, false, callback)
+            }
+        } // end scope.launch
     }
 
     /** Close GATT and reset state so a new connection attempt can be made. */
